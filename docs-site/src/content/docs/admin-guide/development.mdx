@@ -14,10 +14,10 @@ git clone https://github.com/4mplelab/unistock.git
 cd unistock
 cp .env.example .env
 # .envを編集する(DEMO_MODE=trueにするとBASEアカウント無しで試せる)
-docker compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-`docker-compose.dev.yml`はソースからビルドする開発用の構成で、READMEのクイックスタートで使う`docker-compose.yml`(ビルド済みイメージをpull)とは別物です。コード変更後に反映したい場合は`docker compose -f docker-compose.dev.yml build <service> && docker compose -f docker-compose.dev.yml up -d <service>`を再実行してください(bind mountではなくイメージにソースを焼き込む構成のため、自動では反映されません)。
+`docker-compose.dev.yml`は、READMEのクイックスタートで使う`docker-compose.yml`(ビルド済みイメージをpull)に**重ねて使う差分ファイル**です(backend/frontendをソースからビルドする設定に差し替えるだけで、db等は`docker-compose.yml`の定義をそのまま使います)。必ず`-f docker-compose.yml -f docker-compose.dev.yml`の順で両方指定してください。コード変更後に反映したい場合は`docker compose -f docker-compose.yml -f docker-compose.dev.yml build <service> && docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d <service>`を再実行してください(bind mountではなくイメージにソースを焼き込む構成のため、自動では反映されません)。
 
 ## ローカル開発(コンテナを使わない場合)
 
@@ -37,7 +37,7 @@ npm run dev
 
 `asyncpg`はPython 3.12向けのプリビルドwheelを使うため、ローカルでもPython 3.12系を推奨します(3.13/3.14ではソースビルドに失敗する場合があります)。
 
-> **注意**: `npm run dev`(Vite dev server)には`/api`へのプロキシ設定がなく、`/api/*`宛のリクエストがVite自身のindex.html(SPAフォールバック)に飲み込まれてしまい、一覧画面が読み込み中のまま止まります。フロントエンドをbackendと繋いだ状態で動作確認したい場合は、`docker compose -f docker-compose.dev.yml up --build`でnginx経由(`http://localhost:3000`)にアクセスしてください。
+> **注意**: `npm run dev`(Vite dev server)には`/api`へのプロキシ設定がなく、`/api/*`宛のリクエストがVite自身のindex.html(SPAフォールバック)に飲み込まれてしまい、一覧画面が読み込み中のまま止まります。フロントエンドをbackendと繋いだ状態で動作確認したい場合は、`docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`でnginx経由(`http://localhost:3000`)にアクセスしてください。
 
 ## テスト
 
@@ -51,7 +51,7 @@ pytest
 [デモモード](/docs/admin-guide/demo-mode/)(`DEMO_MODE=true`)とは別に、通常モードのまま(BASE未認証でも)動作確認用のサンプルデータだけ投入したい場合のショートカットです。
 
 ```bash
-docker compose -f docker-compose.dev.yml exec backend python scripts/seed_demo_data.py
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec backend python scripts/seed_demo_data.py
 ```
 
 - BASEのshopが無ければ作成し、あれば使い回してそこに部品・中間品・BOM・注文・発注・在庫スケジューラーのサンプルデータを投入します
@@ -64,7 +64,7 @@ docker compose -f docker-compose.dev.yml exec backend python scripts/seed_demo_d
 `orders.total`/`order_items.total`列を追加した時点で既に取り込み済みの注文(特に発送確定済みで以後リチェック対象から外れるもの)はNULLのまま残るため、BASEの注文詳細APIを個別に呼び直して埋める一回限りのスクリプトです。
 
 ```bash
-docker compose -f docker-compose.dev.yml exec backend python scripts/backfill_order_totals.py
+docker compose -f docker-compose.yml -f docker-compose.dev.yml exec backend python scripts/backfill_order_totals.py
 ```
 
 - `orders.total`または`order_items.total`が未取得の注文だけを対象にします(何度実行しても安全)

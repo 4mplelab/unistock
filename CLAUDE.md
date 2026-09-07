@@ -26,7 +26,7 @@
 
 ## 開発ワークフロー
 
-- ローカルでのソース変更確認は`docker-compose.dev.yml`(ソースからビルド)を使う。`docker-compose.yml`はビルド済みイメージをpullする本番/配布用構成で`build:`を持たないため、これでは動かない。backend/frontendはソースをイメージに焼き込む構成(bind mountなし)のため、コード変更後は`docker compose -f docker-compose.dev.yml build <service> && up -d <service>`が必要(ホットリロードされない)。ローカルで直接起動する場合(`uvicorn --reload`/`npm run dev`)はホットリロードされる
+- ローカルでのソース変更確認は`docker-compose.dev.yml`を使う。これは単独では使えない**差分ファイル**で、本番/配布用の`docker-compose.yml`(ビルド済みイメージをpull)に重ねて`docker compose -f docker-compose.yml -f docker-compose.dev.yml ...`のように指定する(backend/frontendだけソースビルドに差し替え、db等は`docker-compose.yml`の定義をそのまま使う)。backend/frontendはソースをイメージに焼き込む構成(bind mountなし)のため、コード変更後は`docker compose -f docker-compose.yml -f docker-compose.dev.yml build <service> && up -d <service>`が必要(ホットリロードされない)。ローカルで直接起動する場合(`uvicorn --reload`/`npm run dev`)はホットリロードされる
 - 新しいUIラベル・ボタン文言・画面構成を書く前に、類似の既存画面のコードを確認してから合わせる
 
 ## 確立済みのUI規約
