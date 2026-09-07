@@ -1,0 +1,229 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource/roboto/400.css";
+@import "@fontsource/roboto/500.css";
+@import "@fontsource/roboto/700.css";
+@import "@fontsource/zen-kaku-gothic-new";
+@import "@fontsource/zen-kaku-gothic-new/500.css";
+@import "@fontsource/zen-kaku-gothic-new/700.css";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-heading: var(--font-sans);
+    --font-sans: 'Roboto', 'Zen Kaku Gothic New', sans-serif;
+    --font-mono: 'JetBrains Mono Variable', monospace;
+    --color-sidebar-ring: var(--sidebar-ring);
+    --color-sidebar-border: var(--sidebar-border);
+    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+    --color-sidebar-accent: var(--sidebar-accent);
+    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+    --color-sidebar-primary: var(--sidebar-primary);
+    --color-sidebar-foreground: var(--sidebar-foreground);
+    --color-sidebar: var(--sidebar);
+    --color-chart-5: var(--chart-5);
+    --color-chart-4: var(--chart-4);
+    --color-chart-3: var(--chart-3);
+    --color-chart-2: var(--chart-2);
+    --color-chart-1: var(--chart-1);
+    --color-chart-accent: var(--chart-accent);
+    --color-chart-accent-2: var(--chart-accent-2);
+    --color-ring: var(--ring);
+    --color-input: var(--input);
+    --color-border: var(--border);
+    --color-destructive: var(--destructive);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-accent: var(--accent);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-muted-foreground-subtle: var(--muted-foreground-subtle);
+    --color-muted: var(--muted);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-secondary: var(--secondary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-primary: var(--primary);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-popover: var(--popover);
+    --color-card-foreground: var(--card-foreground);
+    --color-card: var(--card);
+    --color-foreground: var(--foreground);
+    --color-background: var(--background);
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+    --radius-2xl: calc(var(--radius) * 1.8);
+    --radius-3xl: calc(var(--radius) * 2.2);
+    --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+    /* card(1.0)・muted(0.97)いずれとも明確な明度差を確保し、カードが背景から
+       浮いて見えるようにする(0.985だとcard・mutedとの差がほぼ無く、カード・
+       一覧・ヘッダー行が背景に溶けて見えていた) */
+    --background: oklch(0.94 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --muted-foreground-subtle: oklch(0.72 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+    /* グラフ用パレット。アプリ全体はモノトーン基調で統一しているが、ダッシュボードの
+       グラフ・アイコンバッジだけは本格的にカラフルにする方針(2026-08-30決定)。
+       5系列を判別しやすいよう色相を均等に振り分けた実カラーパレット */
+    --chart-1: oklch(0.62 0.2 300);
+    /* violet */
+    --chart-2: oklch(0.62 0.19 250);
+    /* blue */
+    --chart-3: oklch(0.68 0.15 155);
+    /* emerald */
+    --chart-4: oklch(0.75 0.16 80);
+    /* amber */
+    --chart-5: oklch(0.65 0.2 15);
+    /* rose */
+    /* 単一系列グラフ用のアクセント色(発注リードタイム分布=sky、中間品組立稼働状況=purple) */
+    --chart-accent: oklch(0.65 0.16 220);
+    --chart-accent-2: oklch(0.58 0.2 305);
+    --radius: 0.625rem;
+    --sidebar: oklch(0.94 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+    /* input[type=date]等のカレンダーアイコンがダークモードでも黒いまま
+       見えなくなる問題への対策(ブラウザにネイティブフォームUIをダーク
+       配色でレンダリングさせる。scrollbar等も併せてダークになる) */
+    color-scheme: dark;
+    /* background・cardの明度差を広げ、カードが背景から浮いて見えるようにする
+       (0.145→0.205の差だとリング(枠線)だけに頼ることになりぼやけて見えていた) */
+    --background: oklch(0.13 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.225 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.225 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --muted-foreground-subtle: oklch(0.55 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+    /* ダークモードのcard(0.225)に対して十分な明度を保ちつつ、ライトモードと
+       同じ色相のカラフルな5系列パレットにする */
+    --chart-1: oklch(0.72 0.19 300);
+    --chart-2: oklch(0.72 0.17 250);
+    --chart-3: oklch(0.76 0.14 155);
+    --chart-4: oklch(0.8 0.15 80);
+    --chart-5: oklch(0.74 0.18 15);
+    --chart-accent: oklch(0.74 0.15 220);
+    --chart-accent-2: oklch(0.7 0.18 305);
+    --sidebar: oklch(0.225 0 0);
+    --sidebar-foreground: oklch(0.985 0 0);
+    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.269 0 0);
+    --sidebar-accent-foreground: oklch(0.985 0 0);
+    --sidebar-border: oklch(1 0 0 / 10%);
+    --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+  html {
+    @apply font-sans;
+    }
+}
+
+/* 印刷時(ピッキングの印刷/PDF出力機能など)は、ダークモードのままでも常にライト配色で
+   出力する(黒背景で印刷されるのを防ぐ)。個々のコンポーネントを直接いじらず、.darkが
+   上書きしているのと同じトークンを@media print内で再度ライトの値に戻すだけで、
+   このトークンを参照する全コンポーネントに一括で効かせられる */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+  /* print-color-adjustを*(全要素)に強制すると、ブラウザが「背景を印刷しない」ことで
+     偶然隠れていた別の要素の意図しない背景色まで顕在化する事故が起きたため、
+     実際に濃い背景色を意図して使っている要素(.force-print-colorを付与したバッジ等)
+     にだけ限定して適用する */
+  .force-print-color {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* ページ全体の地色は必ず純白にする(トークン経由の指定だけに頼ると、カスケードの
+     都合でhtml/bodyの背景まで反映されないブラウザがあり、用紙の周囲が地の色のまま
+     残って見えることがあるため直接指定で保険をかける)。
+     高さもh-screen(100vh)固定のままだと1ページ分の高さに収まらない内容が
+     はみ出し、その周囲が地の色(ダークテーマの黒)のまま残って見えるバグの
+     原因になっていたため、印刷時は内容の高さに合わせて自然に伸びるようにする */
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+  }
+  .dark {
+    --background: oklch(1 0 0);
+    /* 画面の文字色(0.145、ほぼ黒)より少し明るくし、小さいフォントでも
+       全体的に軽く見えるようにする */
+    --foreground: oklch(0.32 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.32 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.32 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --muted-foreground-subtle: oklch(0.72 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+  }
+}
+
+/* タグバッジの配色。--tag-color-light/darkはTagBadgeコンポーネントがインラインで設定する */
+.tag-color-badge {
+    background-color: color-mix(in oklab, var(--tag-color-light) 16%, transparent);
+    color: var(--tag-color-light);
+}
+.dark .tag-color-badge {
+    background-color: color-mix(in oklab, var(--tag-color-dark) 24%, transparent);
+    color: var(--tag-color-dark);
+}

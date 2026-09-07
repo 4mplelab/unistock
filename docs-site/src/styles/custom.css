@@ -1,0 +1,13 @@
+/* UniStock本体(frontend/src/index.css)と同じフォントに揃える。
+   背景色・ダークモードの黒はstarlight-theme-black(astro.config.mjsのplugins)が担当する */
+:root {
+	--sl-font: "Zen Kaku Gothic New", sans-serif;
+	/* Starlight標準のコンテンツ幅変数。デフォルト(45rem)だとスクリーンショットが小さく
+	   縮小されて読みにくいため広げる */
+	--sl-content-width: 60rem;
+}
+
+/* sl-content-widthだけでは効かない(starlight-theme-blackが.main-paneの幅を独自に固定しているため)、こちらも直接上書きする */
+[data-has-sidebar][data-has-toc] .main-pane {
+	max-width: 60rem;
+}

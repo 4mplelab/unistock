@@ -1,0 +1,11 @@
+注文ID,商品コード,バリエーション,個数,単価,お名前,都道府県,住所,メール,注文日
+DEMO-OK-1,demo-manual-001,ブラック,2,3200,山田太郎,東京都,渋谷区1-2-3,yamada@example.com,2026-09-01
+DEMO-OK-1,demo-manual-002,,1,500,山田太郎,東京都,渋谷区1-2-3,yamada@example.com,2026-09-01
+DEMO-OK-2,demo-manual-001,ホワイト,1,3000,鈴木花子,大阪府,大阪市北区4-5-6,suzuki@example.com,2026-09-02
+DEMO-OK-3,demo-manual-002,,3,500,佐藤次郎,,,,2026-09-03
+DEMO-ERR-NOITEM,not-an-existing-item,,1,1000,テスト太郎,,,,2026-09-04
+DEMO-ERR-NOVARIATION,demo-manual-001,存在しない色,1,3000,テスト太郎,,,,2026-09-04
+DEMO-ERR-EMPTYITEM,,,1,500,テスト太郎,,,,2026-09-04
+DEMO-ERR-BADQTY,demo-manual-002,,abc,500,テスト太郎,,,,2026-09-04
+DEMO-ERR-ZEROQTY,demo-manual-002,,0,500,テスト太郎,,,,2026-09-04
+DEMO-ERR-BADDATE,demo-manual-002,,1,500,テスト太郎,,,,not-a-date

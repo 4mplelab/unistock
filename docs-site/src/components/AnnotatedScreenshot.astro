@@ -1,0 +1,60 @@
+---
+// スクショの左側に番号ガター(丸数字)を添える。実UIのバッジ(通知数など)と
+// 見分けが付かなくならないよう、番号は画像の外に置き、画像には一切重ねない。
+// markersのtopは画像の高さに対する割合(%)で指定する。
+interface Marker {
+  number: number;
+  top: number; // 0-100
+}
+interface Props {
+  src: string;
+  alt: string;
+  markers: Marker[];
+}
+const { src, alt, markers } = Astro.props as Props;
+---
+
+<div class="annotated">
+	<div class="gutter">
+		{markers.map((m) => (
+			<div class="marker" style={`top: ${m.top}%`}>{m.number}</div>
+		))}
+	</div>
+	<img src={src} alt={alt} />
+</div>
+
+<style>
+	.annotated {
+		display: flex;
+		align-items: stretch;
+		gap: 0.5rem;
+		margin: 1.5rem 0;
+	}
+	.gutter {
+		position: relative;
+		flex: 0 0 auto;
+		width: 1.75rem;
+	}
+	.marker {
+		position: absolute;
+		left: 0;
+		transform: translateY(-50%);
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 50%;
+		background: var(--sl-color-gray-3);
+		color: var(--sl-color-gray-7);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-weight: 700;
+		font-size: var(--sl-text-sm);
+	}
+	.annotated img {
+		margin: 0;
+		flex: 1 1 auto;
+		min-width: 0;
+		border-radius: 0.5rem;
+		border: 1px solid var(--sl-color-gray-5);
+	}
+</style>

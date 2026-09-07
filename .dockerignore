@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/dist
+**/.astro
+backend/.venv
+backend/**/__pycache__
+frontend/dist
+docs-site/dist
+tmp.md

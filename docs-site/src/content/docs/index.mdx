@@ -1,0 +1,66 @@
+---
+title: UniStockとは
+description: 複数ECプラットフォームに対応可能な、在庫・注文・部品の統合管理Webアプリ
+---
+
+import { Card, CardGrid, LinkCard } from "@astrojs/starlight/components";
+import FlowDiagram from "../../components/FlowDiagram.astro";
+
+*UniStock(読み方: ユニストック) — 「Uni」(統一)+「Stock」(在庫)から。*
+
+UniStockは、部品・中間品(半製品)・BOM(商品レシピ)・注文・発注・在庫スケジュールを一元管理するWebアプリです。ECサイト(現在はBASE)から注文を自動で検知し、商品ごとに登録したBOMに従って部品在庫を自動的に引き当てます。
+
+![ダッシュボード画面](/docs/screenshots/dashboard.jpg)
+
+## このサイトの読み方
+
+<CardGrid>
+	<Card title="日常的にUniStockを使う方">
+		「エンドユーザー向け」の各ページを参照してください。部品の登録から発注、注文の確認まで、日々の操作を説明しています。
+	</Card>
+	<Card title="導入・環境構築を行う方">
+		「管理者向け」の各ページを参照してください。ショップの追加・連携設定、デモモードでの試用方法などを説明しています。サーバーの構築手順(`.env`の設定、Docker Composeでの起動など)は[README](https://github.com/4mplelab/unistock)を参照してください。
+	</Card>
+</CardGrid>
+
+## 登場する要素とその関係
+
+UniStockに出てくる要素は、大きく分けて「在庫を作る側」と「注文で消費される側」の2つの流れがあります。
+
+### 在庫の作られ方: 部品 → 中間品
+
+**部品**(ネジ・スイッチ・センサーなど、それ以上分解しない最小単位の在庫)を材料にして、**中間品**(半製品)を組み立てます。中間品はさらに別の中間品の材料にもなります(多段階の組み立て)。
+
+<FlowDiagram
+	steps={[
+		{ label: "部品", sub: "ネジ・スイッチ等", tone: "part" },
+		{ label: "中間品", sub: "組み立てて作る半製品", tone: "assembly" },
+		{ label: "より大きな中間品", sub: "中間品を材料にもできる", tone: "assembly" },
+	]}
+/>
+
+### 注文が来たときの流れ: ショップ → 注文 → 在庫の消費
+
+**ショップ**(連携するECサイトの1店舗)に**注文**が入ると、UniStockが自動で検知します。注文の商品には**BOM**(この商品を1個発送するには部品・中間品を何個消費するか、というレシピ)が登録されており、それに従って部品・中間品の在庫が自動的に引き当てられます。
+
+<FlowDiagram
+	steps={[
+		{ label: "ショップ", sub: "BASE等のECサイト", tone: "shop" },
+		{ label: "注文", sub: "自動で検知", tone: "order" },
+		{ label: "BOM", sub: "商品ごとのレシピ", tone: "product" },
+		{ label: "部品・中間品", sub: "在庫を引当・消費", tone: "part" },
+	]}
+/>
+
+<Card title="ショップをまたいだ在庫の共有" icon="information">
+	部品・中間品の在庫は**全ショップで共有**されます。ショップAとショップBで同じ部品を使う商品を売っている場合、どちらの注文が先に来ても同じ在庫を正しく取り合う(早い者勝ちで引き当てる)ように作られています。
+</Card>
+
+## 次に読むページ
+
+<CardGrid>
+	<LinkCard title="ヘッダーとナビゲーション" href="/docs/user-guide/header/" description="画面の基本構成" />
+	<LinkCard title="ダッシュボード" href="/docs/user-guide/dashboard/" description="ログイン後まず見る画面" />
+	<LinkCard title="部品・中間品" href="/docs/user-guide/parts/" description="在庫の登録" />
+	<LinkCard title="BOM(商品レシピ)" href="/docs/user-guide/bom/" description="商品と部品を結びつける" />
+</CardGrid>

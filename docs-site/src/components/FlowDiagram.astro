@@ -1,0 +1,91 @@
+---
+// シンプルな「箱＋矢印」の関係図。stepsに{label, sub?, tone?}の配列を渡す。
+// tone: "part" | "assembly" | "product" | "order" | "shop"(色分け用、省略時は既定色)
+interface Step {
+  label: string;
+  sub?: string;
+  tone?: "part" | "assembly" | "product" | "order" | "shop";
+}
+interface Props {
+  steps: Step[];
+}
+const { steps } = Astro.props as Props;
+---
+
+<div class="flow">
+	{steps.map((step, i) => (
+		<>
+			<div class:list={["node", step.tone]}>
+				<div class="label">{step.label}</div>
+				{step.sub && <div class="sub">{step.sub}</div>}
+			</div>
+			{i < steps.length - 1 && <div class="arrow" aria-hidden="true">→</div>}
+		</>
+	))}
+</div>
+
+<style>
+	.flow {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		margin: 1.5rem 0;
+		padding: 1.25rem;
+		border-radius: 0.5rem;
+		background: var(--sl-color-gray-6, var(--sl-color-gray-7));
+	}
+	.node {
+		flex: 0 0 auto;
+		min-width: 8rem;
+		/* Starlightの本文用CSSが「2番目以降の要素」に付けるmargin-topを打ち消す
+		   (このコンポーネントはmarkdown本文フローの一部として扱われてしまうため) */
+		margin: 0;
+		padding: 0.75rem 1rem;
+		border-radius: 0.5rem;
+		border: 1px solid var(--sl-color-gray-5);
+		background: var(--sl-color-bg);
+		text-align: center;
+	}
+	.node .label {
+		margin: 0;
+		font-weight: 600;
+		font-size: var(--sl-text-sm);
+	}
+	.node .sub {
+		margin: 0.15rem 0 0;
+		font-size: var(--sl-text-xs);
+		color: var(--sl-color-gray-3);
+	}
+	.node.part {
+		border-color: var(--sl-color-blue);
+	}
+	.node.assembly {
+		border-color: var(--sl-color-purple);
+	}
+	.node.product {
+		border-color: var(--sl-color-green);
+	}
+	.node.order {
+		border-color: var(--sl-color-orange);
+	}
+	.node.shop {
+		border-color: var(--sl-color-gray-2);
+	}
+	.arrow {
+		flex: 0 0 auto;
+		margin: 0;
+		font-size: 1.25rem;
+		color: var(--sl-color-gray-3);
+	}
+	@media (max-width: 42rem) {
+		.flow {
+			flex-direction: column;
+			align-items: stretch;
+		}
+		.arrow {
+			text-align: center;
+			transform: rotate(90deg);
+		}
+	}
+</style>

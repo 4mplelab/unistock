@@ -1,0 +1,79 @@
+---
+title: 本番デプロイとバックアップ
+description: GitHub Container Registryを使ったビルドなしデプロイ、リリースの出し方、DBバックアップ
+---
+
+Docker Composeが動く任意のサーバー(クラウドVM・自宅サーバー等)向けの構成です。デプロイ先ではDockerイメージのビルドを行わず、GitHub Container Registry(ghcr.io)からpullしたイメージのみで動かします。
+
+ビルドは`.github/workflows/release.yml`が自動で行いますが、**`v*`タグをpushしたときだけ**(=リリースしたときだけ)動きます。`main`への通常のpushではイメージは作られません(`latest`タグが常に「最新の安定リリース」を指すようにするため、日々のコミットごとには動かさない方針)。`main`へのpushやPRでは`.github/workflows/build-check.yml`がビルドできることだけを確認します(pushはしません)。
+
+## リリースの出し方
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+これでGitHub Actionsが自動で以下を行います(認証は組み込みの`GITHUB_TOKEN`を使うため追加のトークン発行は不要です)。
+
+1. `backend`/`frontend`イメージを`v1.0.0`と`latest`の両タグでビルド・push
+2. コミット履歴からの変更履歴付きでGitHub Releaseを作成
+
+Release自体にファイルは添付しません(このアプリの「成果物」はDockerイメージそのものなので)。
+
+## 初回セットアップ(GitHub側、1回だけ)
+
+1. リポジトリをGitHubへpushする
+2. 最初のリリースとして`git tag v0.1.0 && git push origin v0.1.0`等を実行する
+3. **初回リリースの後、1回だけ手動での操作が必要です**: GitHubリポジトリの「Packages」タブから`unistock/backend`・`unistock/frontend`パッケージを開き、それぞれSettings → Change visibility で**Public**に変更する(デフォルトはリポジトリが公開でも非公開で作成されるため)。Public化すればデプロイ先はログイン不要でpullできる
+
+レジストリパスはハードコードせず、`.env`の`REGISTRY_PATH`(既定値: `ghcr.io/<GitHub組織orユーザー名>/unistock`)を`docker-compose.yml`と`scripts/build_and_push.sh`の両方から参照します。変更する場合は`.env`を書き換えるだけでよく、コードの変更は不要です。
+
+## 手元でビルド・pushしたい場合(CIを使わない場合)
+
+```bash
+docker login ghcr.io -u <GitHubユーザー名>  # Personal Access Token(write:packagesスコープ)でログイン
+./scripts/build_and_push.sh                 # latestタグでbuild & push
+./scripts/build_and_push.sh v1.0.1          # バージョンタグを付けたい場合
+```
+
+## デプロイ先サーバー
+
+### 初回
+
+1. サーバーにSSHでログインする(Docker Composeが使える状態にしておく)
+2. 任意のディレクトリ(例: `/opt/unistock`)に、`docker-compose.yml`と`.env`だけを配置する(ソースコード一式は不要)
+3. パッケージがPublicであればログイン不要でpullできる。pull & 起動するだけでよい
+
+   ```bash
+   docker compose pull
+   docker compose up -d
+   ```
+
+   (パッケージをPrivateのまま運用する場合のみ、事前に`docker login ghcr.io -u <GitHubユーザー名>`をread:packagesスコープのPersonal Access Tokenで行う)
+
+### 更新時
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+特定バージョンを指定したい場合は`.env`に`IMAGE_TAG=v1.0.1`を追記してから同じコマンドを実行します(未指定時は`latest`)。
+
+> **ヒント**: 新しいリリースが出ているかどうかは、UniStockのヘッダーの通知ベルが自動で教えてくれます(実行中バージョンとGitHubの最新リリースを比較し、違いがあれば表示)。**自動更新はしない**ため、更新するかどうか・いつ行うかは上記のコマンドを自分で実行して判断してください。
+
+## DBバックアップ
+
+`db-backup`コンテナが毎日1回自動でDB全体を`pg_dump`し、`unistock_db_backups`ボリューム(dockerが管理するホスト側ストレージ)に世代管理付きで保存します。追加設定は不要です(`.env`の`POSTGRES_*`を再利用)。デフォルトで直近31日分を保持し、それより古いものは自動削除されます(`docker-compose.yml`の`db-backup`サービスの`BACKUP_KEEP_DAYS`で変更可能)。
+
+バックアップ一覧の確認・復元は手動でコンテナに入って行います。
+
+```bash
+# バックアップ一覧
+docker compose exec db-backup ls -la /backups/daily
+
+# 復元(アプリを止めてから実行すること。<ファイル名>は上記一覧から選ぶ)
+docker compose exec db-backup gunzip -c /backups/daily/<ファイル名>.sql.gz | \
+  docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```

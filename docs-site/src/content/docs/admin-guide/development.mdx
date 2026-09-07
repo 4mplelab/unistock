@@ -1,0 +1,90 @@
+---
+title: 開発者向け情報
+description: コンテナを使わないローカル開発、テスト、サンプルデータ投入スクリプト、商品APIの直接呼び出し
+---
+
+UniStock自体のコードを触る場合や、動作確認用のスクリプト・外部連携APIについてまとめたページです。通常の利用(セットアップ・運用)には不要です。
+
+## ソースからビルドして動かす
+
+READMEのクイックスタートはビルド済みイメージをpullする方法でしたが、ソースコードを変更しながら動かしたい場合はリポジトリをクローンしてビルドします。
+
+```bash
+git clone https://github.com/4mplelab/unistock.git
+cd unistock
+cp .env.example .env
+# .envを編集する(DEMO_MODE=trueにするとBASEアカウント無しで試せる)
+docker compose -f docker-compose.dev.yml up --build
+```
+
+`docker-compose.dev.yml`はソースからビルドする開発用の構成で、READMEのクイックスタートで使う`docker-compose.yml`(ビルド済みイメージをpull)とは別物です。コード変更後に反映したい場合は`docker compose -f docker-compose.dev.yml build <service> && docker compose -f docker-compose.dev.yml up -d <service>`を再実行してください(bind mountではなくイメージにソースを焼き込む構成のため、自動では反映されません)。
+
+## ローカル開発(コンテナを使わない場合)
+
+```bash
+# backend
+cd backend
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload
+
+# frontend
+cd frontend
+npm install
+npm run dev
+```
+
+`asyncpg`はPython 3.12向けのプリビルドwheelを使うため、ローカルでもPython 3.12系を推奨します(3.13/3.14ではソースビルドに失敗する場合があります)。
+
+> **注意**: `npm run dev`(Vite dev server)には`/api`へのプロキシ設定がなく、`/api/*`宛のリクエストがVite自身のindex.html(SPAフォールバック)に飲み込まれてしまい、一覧画面が読み込み中のまま止まります。フロントエンドをbackendと繋いだ状態で動作確認したい場合は、`docker compose -f docker-compose.dev.yml up --build`でnginx経由(`http://localhost:3000`)にアクセスしてください。
+
+## テスト
+
+```bash
+cd backend
+pytest
+```
+
+## サンプルデータだけ投入したい場合
+
+[デモモード](/docs/admin-guide/demo-mode/)(`DEMO_MODE=true`)とは別に、通常モードのまま(BASE未認証でも)動作確認用のサンプルデータだけ投入したい場合のショートカットです。
+
+```bash
+docker compose -f docker-compose.dev.yml exec backend python scripts/seed_demo_data.py
+```
+
+- BASEのshopが無ければ作成し、あれば使い回してそこに部品・中間品・BOM・注文・発注・在庫スケジューラーのサンプルデータを投入します
+- 既に投入済みの場合は何もせず終了します(二重投入防止)
+- 消したい場合は、[設定画面](/docs/admin-guide/settings/)の「データ管理」→「全データを消去」を使います(BASE連携の認証情報・設定は消えません)。過去の注文履歴だけ消して部品・中間品・BOMの現在の設定は残したい場合は「注文履歴のみ消去」を使います
+- BOM編集画面の「オプション」「種類」カードはBASEから選択肢を都度取得する仕組みのため、BASE未認証のままでは新規追加ができません(投入済みのBOM行の閲覧・数量変更・削除は可能)。実際に新規追加まで試したい場合は、[BASEとの連携](/docs/admin-guide/shops/#baseとの連携oauth)を行ってください
+
+## 注文・注文商品のtotal(合計金額)をバックフィルしたい場合
+
+`orders.total`/`order_items.total`列を追加した時点で既に取り込み済みの注文(特に発送確定済みで以後リチェック対象から外れるもの)はNULLのまま残るため、BASEの注文詳細APIを個別に呼び直して埋める一回限りのスクリプトです。
+
+```bash
+docker compose -f docker-compose.dev.yml exec backend python scripts/backfill_order_totals.py
+```
+
+- `orders.total`または`order_items.total`が未取得の注文だけを対象にします(何度実行しても安全)
+- 在庫操作・商品ステータス同期など他の取り込み処理には一切触れません
+- 注文数が多いショップでは呼び出し回数がその分増えるため、BASE側のレート制限に注意してください
+
+## 商品API
+
+複数ショップ対応により、エンドポイントは`/api/shops/{shop_id}/items`配下です。外部ツールの商品説明生成フローなどから、このAPIを呼び出してBASEの商品説明を自動同期する用途を想定しています。
+
+| メソッド・パス | 説明 |
+|---|---|
+| `GET /api/shops/{shop_id}/items` | 商品一覧を取得(デモモード中のみテスト用IDが実際のBASE商品に加わる) |
+| `GET /api/shops/{shop_id}/items/{item_id}` | 商品を1件取得。存在しなければ404 |
+| `PATCH /api/shops/{shop_id}/items/{item_id}` | 商品説明(`detail`)を更新 |
+
+```bash
+curl -X PATCH http://localhost:8000/api/shops/1/items/123456789 \
+  -H "Content-Type: application/json" \
+  -d '{"detail": "更新後の商品説明テキスト"}'
+```
+
+成功時は`{"item_id": "...", "success": true}`(200)。編集不可な商品タイプ・存在しない商品ID・BASE未認証の場合は400を返します(エラー内容は`detail`フィールド)。

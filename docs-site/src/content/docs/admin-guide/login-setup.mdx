@@ -1,0 +1,103 @@
+---
+title: ログイン方法の設定(OAuth)
+description: Google/Microsoft/GitHub/XでUniStock自体にログインできるようにする
+---
+
+UniStock自体へのログインはGoogle/Microsoft/GitHub/Xのいずれかのアカウントで行います(自前のパスワード機能は持たない設計)。使うプロバイダの分だけ、それぞれの管理画面でOAuthクライアントを作成し、`.env`にクライアントID/シークレットを設定してください。設定していないプロバイダはログイン画面のボタンを押すとエラーになるだけで、他のプロバイダやアプリ全体には影響しません。
+
+> **ヒント**: `DEMO_MODE=true`で動かす場合はこの設定は一切不要です。ログイン画面はOAuthボタンの代わりに「デモを試す」ボタン1つになり、クリックするだけで固定のデモアカウントとして入れます(実際の認証処理は行いません)。詳しくは[デモモードとサンプルデータ](/docs/admin-guide/demo-mode/)を参照してください。
+
+## 共通の準備
+
+- `.env`の`BACKEND_BASE_URL`(バックエンドの公開URL)を実際の値にしておく。各プロバイダに登録するコールバックURLはこの値をベースに組み立てます
+  - ローカル動作確認: `http://localhost:8000`(デフォルト)
+  - 本番公開時: 実際に外部からアクセスできるURL
+- 各プロバイダのコールバックURLの形式は共通で `{BACKEND_BASE_URL}/api/auth/{プロバイダ名}/callback` です(例: `http://localhost:8000/api/auth/google/callback`)
+
+設定を反映するには`.env`を編集後、バックエンドを再起動してください。
+
+```bash
+docker compose up -d backend
+```
+
+## Google
+
+1. [Google Cloud Console](https://console.cloud.google.com/)を開き、プロジェクトを作成(または既存のものを使う)
+2. 左メニュー「APIとサービス」→「OAuth同意画面」
+   - まだ作成していなければ作成する(ユーザーの種類は「外部」でOK)
+   - 公開ステータスが「テスト」のままの場合、ログインさせたいGoogleアカウントを「テストユーザー」に追加しておく(追加しないとログインできない)
+3. 「APIとサービス」→「認証情報」→「認証情報を作成」→「OAuthクライアントID」
+   - アプリケーションの種類: 「ウェブアプリケーション」
+   - 承認済みのリダイレクトURI: `{BACKEND_BASE_URL}/api/auth/google/callback`
+4. 作成後に表示される「クライアントID」「クライアントシークレット」を控える
+5. `.env`に設定する
+
+   ```bash
+   GOOGLE_CLIENT_ID=発行されたクライアントID
+   GOOGLE_CLIENT_SECRET=発行されたクライアントシークレット
+   ```
+
+## Microsoft
+
+1. [Azure Portal](https://portal.azure.com/)を開き、「Microsoft Entra ID」→「アプリの登録」→「新規登録」
+2. 登録画面で入力する
+   - 名前: 任意(例: UniStock)
+   - サポートされているアカウントの種類: 「任意の組織のディレクトリ内のアカウントと個人のMicrosoftアカウント」を選択(個人のOutlook/Hotmailアカウントも許可する場合。組織アカウントのみでよければ他の選択肢でも可)
+   - リダイレクトURI: プラットフォーム「Web」を選び`{BACKEND_BASE_URL}/api/auth/microsoft/callback`を入力
+3. 登録後の「概要」ページに表示される「アプリケーション(クライアント) ID」を控える
+4. 左メニュー「証明書とシークレット」→「新しいクライアントシークレット」を作成し、作成直後に表示される「値」を控える(画面を離れると二度と表示されません)
+5. `.env`に設定する
+
+   ```bash
+   MICROSOFT_CLIENT_ID=アプリケーション(クライアント)ID
+   MICROSOFT_CLIENT_SECRET=クライアントシークレットの値
+   ```
+
+APIのアクセス許可(openid/email/profile)は既定の委任アクセス許可の範囲内で動作するため、追加の管理者同意は通常不要です。
+
+## GitHub
+
+1. GitHubの[Settings → Developer settings → OAuth Apps](https://github.com/settings/developers)を開き、「New OAuth App」
+2. 入力する
+   - Application name: 任意(例: UniStock)
+   - Homepage URL: `{FRONTEND_BASE_URL}`(例: `http://localhost:3000`)
+   - Authorization callback URL: `{BACKEND_BASE_URL}/api/auth/github/callback`
+3. 「Register application」後、表示される「Client ID」を控える
+4. 「Generate a new client secret」でシークレットを発行し、値を控える
+5. `.env`に設定する
+
+   ```bash
+   GITHUB_CLIENT_ID=発行されたClient ID
+   GITHUB_CLIENT_SECRET=発行されたクライアントシークレット
+   ```
+
+> **注意**: GitHubでログインするアカウントは、検証済み(verified)のメールアドレスを1つ以上持っている必要があります。メールアドレスが1つも検証されていないと`profile_failed`エラーになります(GitHubのSettings → Emailsで確認・検証できます)。
+
+## X(旧Twitter)
+
+1. [X Developer Portal](https://developer.x.com/)でProject/Appを作成する(無料枠のBasicプランで可)
+2. 対象のAppの「User authentication settings」を開き「Set up」→「Edit」
+   - App permissions: 「Read」で可
+   - Type of App: 「Web App, Automated App or Bot」
+   - Callback URI / Redirect URL: `{BACKEND_BASE_URL}/api/auth/x/callback`
+   - Website URL: `{FRONTEND_BASE_URL}`
+3. 保存後、「Keys and tokens」タブの「OAuth 2.0 Client ID and Client Secret」を控える
+4. `.env`に設定する
+
+   ```bash
+   X_CLIENT_ID=発行されたClient ID
+   X_CLIENT_SECRET=発行されたClient Secret
+   ```
+
+> **注**: XのAPIはメールアドレスを一切返さない仕様のため、UniStock内部ではXアカウントを`x:ユーザーID`という形式の識別子で扱います(下記「ログインを許可するアカウントの登録」への登録時もこの形式を使います)。
+
+## ログインを許可するアカウントの登録
+
+プロバイダの設定だけではログインできません。OAuthログイン自体に成功しても、事前に[許可ユーザー](/docs/admin-guide/settings/#許可ユーザー)として登録されていないアカウントは「このアカウントにはUniStockへのアクセス権がありません」で弾かれます(許可リスト方式)。
+
+- **最初の管理者**: `.env`の`INITIAL_ADMIN_IDENTIFIER`に自分のメールアドレス(Xの場合は`x:ユーザーID`)を設定してバックエンドを起動すると、まだ誰も登録されていない場合に限り自動的に管理者として登録されます。登録後は空に戻しても問題ありません
+- **2人目以降**: 最初の管理者でログイン後、「設定」→「許可ユーザー」から追加できます(識別子・表示名・管理者権限の有無を指定)
+
+## 参考: ログイン自体を無効化したい場合
+
+信頼できるネットワーク内のみで運用し、ログイン機能自体が不要な場合は`.env`の`AUTH_ENABLED=false`を設定してバックエンドを再起動すると、認証なしで全機能を使えるモードになります。インターネットに公開する構成では`true`のままにしてください。
