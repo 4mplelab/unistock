@@ -1,13 +1,16 @@
 """UniStockの既存REST APIを読み取り専用ツールとしてMCP公開するサーバー。
 
-DBには一切触れず、UniStockの稼働中インスタンスに対してAPIキー(Bearer)付きで
-HTTPリクエストするだけの薄いラッパー。書き込み系(発注・削除等)は含めない。
+DBには一切触れず、UniStockの稼働中インスタンスにHTTPリクエストするだけの薄い
+ラッパー。書き込み系(発注・削除等)は含めない。
 
 環境変数:
   UNISTOCK_API_BASE_URL  例: http://localhost:8000/api (既定値)
-  UNISTOCK_API_KEY       設定画面「APIキー」から発行した値(必須。UniStock APIの呼び出しと、
-                          MCP_TRANSPORT=streamable-http時のこのMCPサーバー自体への
-                          接続認証の両方に使う)
+  UNISTOCK_API_KEY       このMCPサーバーへの接続と、UniStock API呼び出しの両方に使う
+                          単一の値。UniStock側がAUTH_ENABLED=trueなら設定画面「APIキー」
+                          から発行した値を、falseなら任意の秘密文字列を自分で決めて設定
+                          する(falseの場合UniStock APIには送っても無視されるだけで、
+                          このMCPサーバー自体への接続保護としてのみ機能する)。
+                          MCP_TRANSPORT=streamable-http時は必須、stdio時は省略可
   MCP_TRANSPORT          stdio(既定、AIアプリがローカルでプロセス起動する方式)
                           または streamable-http(常時起動のWebサービスとして動かし、
                           ネットワーク越しに接続する方式。Docker運用向け)
@@ -22,23 +25,24 @@ import httpx
 from mcp.server.mcpserver import MCPServer
 
 API_BASE_URL = os.environ.get("UNISTOCK_API_BASE_URL", "http://localhost:8000/api")
-API_KEY = os.environ.get("UNISTOCK_API_KEY")
+API_KEY = os.environ.get("UNISTOCK_API_KEY") or None
 TRANSPORT = os.environ.get("MCP_TRANSPORT", "stdio")
 HTTP_HOST = os.environ.get("MCP_HTTP_HOST", "0.0.0.0")
 HTTP_PORT = int(os.environ.get("MCP_HTTP_PORT", "8765"))
 
-if not API_KEY:
-    raise RuntimeError("環境変数 UNISTOCK_API_KEY が設定されていません")
+if TRANSPORT == "streamable-http" and not API_KEY:
+    raise RuntimeError("MCP_TRANSPORT=streamable-httpではUNISTOCK_API_KEYの設定が必須です")
 
 mcp = MCPServer("UniStock")
 
 
 async def _get(path: str, params: dict[str, Any] | None = None) -> Any:
+    headers = {"Authorization": f"Bearer {API_KEY}"} if API_KEY else {}
     async with httpx.AsyncClient(base_url=API_BASE_URL, timeout=10.0) as client:
         response = await client.get(
             path,
             params={k: v for k, v in (params or {}).items() if v is not None},
-            headers={"Authorization": f"Bearer {API_KEY}"},
+            headers=headers,
         )
         response.raise_for_status()
         return response.json()
@@ -156,8 +160,8 @@ async def get_sales_summary(
 def _run_streamable_http() -> None:
     """常時起動のWebサービスとして動かす(Docker運用向け)。ネットワーク越しに
     誰でも叩けてしまわないよう、UNISTOCK_API_KEYと同じ値をこのMCPサーバー自体への
-    接続にもBearerトークンとして要求する(UniStock API呼び出し用の鍵を再利用し、
-    別の秘密情報を増やさない設計)。"""
+    接続にもBearerトークンとして要求する(MCPクライアント側は1つの値しか送らないため、
+    別名の変数は用意せず単一のAPI_KEYで兼用する)。"""
     import uvicorn
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.requests import Request

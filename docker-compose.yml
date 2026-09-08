@@ -50,7 +50,7 @@ services:
     environment:
       TZ: ${TZ:-Asia/Tokyo}
       UNISTOCK_API_BASE_URL: http://backend:8000/api
-      UNISTOCK_API_KEY: ${MCP_API_KEY}
+      UNISTOCK_API_KEY: ${MCP_API_KEY:-}
       MCP_TRANSPORT: streamable-http
     depends_on:
       - backend
