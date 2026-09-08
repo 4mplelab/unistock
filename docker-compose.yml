@@ -41,6 +41,22 @@ services:
     ports:
       - "3000:80"
 
+  # AIクライアント(Claude Desktop/Claude Code等)からUniStockのデータを参照するための
+  # MCPサーバー(読み取り専用)。MCP_API_KEYが未設定の間は起動時にエラー終了するだけで、
+  # 他サービスには影響しない
+  mcp-server:
+    image: ${REGISTRY_PATH}/mcp-server:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Tokyo}
+      UNISTOCK_API_BASE_URL: http://backend:8000/api
+      UNISTOCK_API_KEY: ${MCP_API_KEY}
+      MCP_TRANSPORT: streamable-http
+    depends_on:
+      - backend
+    ports:
+      - "${MCP_SERVER_PORT:-8765}:8765"
+
   # DBの日次バックアップ(pg_dump + 世代管理)。バックアップファイル自体は
   # unistock_db_backups ボリューム(dockerが管理するホスト側ストレージ)に保存される
   db-backup:

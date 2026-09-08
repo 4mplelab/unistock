@@ -1,7 +1,7 @@
 # 開発用の差分ファイル。docker-compose.yml(本番用、ビルド済みイメージをpull)に重ねて使う
 # (docker compose -f docker-compose.yml -f docker-compose.dev.yml ...)。
-# backend/frontendだけソースからビルドする構成に差し替える。db/db-backup/volumes等は
-# docker-compose.ymlの定義をそのまま使うため、ここには書かない。
+# backend/frontend/mcp-serverだけソースからビルドする構成に差し替える。db/db-backup/
+# volumes等はdocker-compose.ymlの定義をそのまま使うため、ここには書かない。
 #
 # imageは本番と同じ名前(${REGISTRY_PATH}/...)にせず、ローカル専用のタグにしている。
 # 同じ名前にすると、ローカルでビルドしたイメージが本番用のタグを上書きしてしまい、
@@ -18,3 +18,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     image: unistock-frontend:dev
+
+  mcp-server:
+    build: ./mcp-server
+    image: unistock-mcp-server:dev

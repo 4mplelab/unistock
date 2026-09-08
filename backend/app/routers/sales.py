@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,9 +19,14 @@ async def sales_summary(
     days: int = 30,
     shop_id: int | None = None,
     date_basis: Literal["dispatched", "ordered"] = "dispatched",
+    start_date: date | None = None,
+    end_date: date | None = None,
     session: AsyncSession = Depends(get_db),
 ) -> SalesSummaryRead:
-    return await get_sales_summary(session, days=days, shop_id=shop_id, date_basis=date_basis)
+    """start_date/end_date(暦日、両端含む)を指定すると、daysより優先してその期間で集計する。"""
+    return await get_sales_summary(
+        session, days=days, shop_id=shop_id, date_basis=date_basis, start_date=start_date, end_date=end_date
+    )
 
 
 @router.get("/recalculate-costs-phrase")

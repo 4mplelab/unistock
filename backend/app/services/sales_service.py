@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,11 +25,23 @@ UNCATEGORIZED_LABEL = "未分類"
 # 全データ削除等と同様、破壊的(取り消せない)操作のため入力必須にしている
 RECALCULATE_COSTS_PHRASE = "原価を再計算"
 
+# start_date/end_date(暦日指定)はJST基準の日付として解釈する(base_ec.pyのBASE日時解釈と同じ方式)
+_JST = timezone(timedelta(hours=9))
+
 
 async def get_sales_summary(
-    session: AsyncSession, days: int = 30, shop_id: int | None = None, date_basis: str = "dispatched"
+    session: AsyncSession,
+    days: int = 30,
+    shop_id: int | None = None,
+    date_basis: str = "dispatched",
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> SalesSummaryRead:
-    """発送確定(dispatched)した注文をもとに、直近days日間の売上・原価・粗利を集計する。
+    """発送確定(dispatched)した注文をもとに、指定期間の売上・原価・粗利を集計する。
+
+    期間はstart_date/end_date(暦日、JST基準、両端含む)を優先し、どちらも未指定の場合のみ
+    「今日からdays日前まで」のローリング期間にフォールバックする(既定の挙動)。
+    start_dateのみ指定時は終了日を今日まで、end_dateのみ指定時は開始日を無制限として扱う。
 
     date_basis="dispatched"(既定)では、日付は発送日(dispatched_at)基準とする(発送確定 =
     実際に売上が確定したタイミングとして扱う)。集計対象はどちらの基準でも常に発送確定済みの
@@ -58,7 +70,18 @@ async def get_sales_summary(
     見直した後、既存の発送済み注文にも反映したい場合は、ショップ設定の「原価を再計算する」で
     現在の単価を使って明示的に上書きできる。
     """
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    until: datetime | None = None
+    if start_date is not None or end_date is not None:
+        since = datetime.combine(start_date, time.min, tzinfo=_JST) if start_date else datetime.min.replace(
+            tzinfo=_JST
+        )
+        until = (
+            datetime.combine(end_date, time.min, tzinfo=_JST) + timedelta(days=1)
+            if end_date
+            else datetime.now(timezone.utc)
+        )
+    else:
+        since = datetime.now(timezone.utc) - timedelta(days=days)
     # 集計キーとなる日付列。母集団(発送確定済みのみ)はどちらの基準でも変えない
     date_column = Order.ordered_at if date_basis == "ordered" else Order.dispatched_at
 
@@ -87,6 +110,8 @@ async def get_sales_summary(
     )
     if shop_id is not None:
         base_query = base_query.where(Order.shop_id == shop_id)
+    if until is not None:
+        base_query = base_query.where(date_column < until)
     rows = (await session.execute(base_query)).all()
 
     categories_by_shop_item = await _fetch_categories_by_shop_item(
@@ -221,8 +246,10 @@ async def get_sales_summary(
     total_gross_profit = total_revenue - total_cost
     gross_margin_rate = total_gross_profit / total_revenue if total_revenue else 0.0
 
+    reported_days = (until.date() - since.date()).days if (start_date or end_date) else days
+
     return SalesSummaryRead(
-        days=days,
+        days=reported_days,
         total_revenue=total_revenue,
         total_quantity=total_quantity,
         total_cost=total_cost,
