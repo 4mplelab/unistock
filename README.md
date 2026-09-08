@@ -6,7 +6,7 @@
 [![Top Language](https://img.shields.io/github/languages/top/4mplelab/unistock)](#技術構成)
 
 複数のECプラットフォームに対応可能な設計の、在庫・注文・部品の統合管理Webアプリです。  
-現在は`BASE`と外部連携APIを持たないサイト向けに、商品・注文を手動登録で運用する`手動管理`ショップに対応。
+現在は`BASE`と、外部連携APIを持たないサイト向けの`手動管理`ショップ(商品・注文を手動登録で運用)に対応。
 
 各画面の詳しい使い方は、起動後にアプリのヘッダーにある「?」アイコンから開けるドキュメントサイトを参照してください。  
 **このREADMEは、Dockerだけで動かすための最小限のセットアップ手順です。**
@@ -111,6 +111,7 @@ ECサイトのアカウントもログイン用の設定も一切不要です。
 
 - 複数台のサーバーでの継続運用・アップデート・DBバックアップは[本番デプロイとバックアップ](docs-site/src/content/docs/admin-guide/deployment.mdx)を参照
 - ソースコードを触る・機能追加する場合は[開発者向け情報](docs-site/src/content/docs/admin-guide/development.mdx)を参照(この場合のみリポジトリのクローンが必要です)
+- Claude Desktop/Claude CodeなどからUniStockのデータを参照したい場合は[MCPサーバー](mcp-server/README.md)を参照(現状は読み取り専用)
 
 ## ライセンス
 
