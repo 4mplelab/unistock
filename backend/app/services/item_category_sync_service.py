@@ -43,7 +43,8 @@ class ItemCategorySyncService:
 
     async def sync(self) -> int:
         """カテゴリ一覧と商品ごとの所属カテゴリを取得し、item_categoriesを洗い替えする。
-        戻り値は同期した商品数。"""
+        戻り値は実際に保存した行数(item_categories)。0の場合、対象商品が無いか、
+        BASE側でカテゴリが1つも取得できなかった(未設定またはAPI取得失敗)ことを示す。"""
         item_ids = await self._target_item_ids()
         if not item_ids:
             await self._session.execute(delete(ItemCategory).where(ItemCategory.shop_id == self._shop_id))
@@ -69,4 +70,4 @@ class ItemCategorySyncService:
 
         await self._session.execute(delete(ItemCategory).where(ItemCategory.shop_id == self._shop_id))
         self._session.add_all(rows)
-        return len(item_ids)
+        return len(rows)

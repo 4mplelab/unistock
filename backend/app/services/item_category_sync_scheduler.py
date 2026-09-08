@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timezone
 
 from app.config import settings
 from app.database import AsyncSessionLocal
@@ -56,6 +57,7 @@ def start_item_category_sync_scheduler() -> None:
         id=JOB_ID,
         max_instances=1,
         coalesce=True,
+        next_run_time=datetime.now(timezone.utc),
     )
 
 
