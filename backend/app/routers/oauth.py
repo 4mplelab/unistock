@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from urllib.parse import quote, urlencode
 
@@ -10,6 +11,7 @@ from app.models.oauth_token import ECOAuthToken
 from app.schemas.oauth import AuthorizeUrlResponse, ExchangeCodeRequest, OAuthStatusResponse
 from app.services.app_setting_service import AppSettingService
 from app.services.auth_service import require_admin, require_auth
+from app.services.item_category_sync_scheduler import sync_item_categories_for_shop_now
 from app.services.order_scheduler import ORDER_POLLER_LAST_SYNCED_AT_KEY
 from app.services.shop_service import ShopNotFoundError, ShopService
 from app.services.token_service import TokenRefreshError, TokenService
@@ -62,6 +64,11 @@ async def exchange_code(
         token = await service.exchange_code(body.code)
     except TokenRefreshError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # 連携直後、既にBOM設定済みの商品があれば先にカテゴリを埋めておく(6時間ごとの
+    # 定期ジョブとは別枠、リクエストを長時間ブロックしないよう自己完結タスクとして
+    # 投げっぱなしにする)。レスポンス自体はトークン交換の成否だけを返す
+    asyncio.create_task(sync_item_categories_for_shop_now(shop_id))
 
     return OAuthStatusResponse(
         authenticated=True,

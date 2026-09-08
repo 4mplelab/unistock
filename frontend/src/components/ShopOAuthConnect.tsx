@@ -54,12 +54,19 @@ export default function ShopOAuthConnect({
       setShowAuthCode(false);
       setAuthCode("");
       queryClient.invalidateQueries({ queryKey: ["oauth-status", shopId] });
+      // ヘッダーの連携状態インジケーター(AppShell)は全ショップ分をまとめた別クエリ
+      // (shops-oauth-status-map)を持っているため、こちらも合わせて無効化しないと
+      // リロードするまで古い状態のまま表示され続ける
+      queryClient.invalidateQueries({ queryKey: ["shops-oauth-status-map"] });
       onConnected?.();
     },
   });
   const disconnectMutation = useMutation({
     mutationFn: () => disconnectShop(shopId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["oauth-status", shopId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["oauth-status", shopId] });
+      queryClient.invalidateQueries({ queryKey: ["shops-oauth-status-map"] });
+    },
   });
 
   if (demoMode) {

@@ -15,6 +15,7 @@ from app.providers.base import ECAuthError, ECPlatform, IECProvider, OrderDetail
 from app.services.address_utils import truncate_address_to_city
 from app.services.bom_service import BomService
 from app.services.event_log_service import EventLogService
+from app.services.order_cost_service import compute_cost_by_order_item
 from app.services.stock_movement_service import record_assembly_movement, record_part_movement
 
 logger = logging.getLogger(__name__)
@@ -833,7 +834,23 @@ class OrderIngestionService:
                     shop_id=order.shop_id,
                 )
             reservation.applied = True
+        await self._confirm_order_item_costs(order)
         await self._session.commit()
+
+    async def _confirm_order_item_costs(self, order: Order) -> None:
+        """発送確定の瞬間に、この注文の各商品明細の原価を一度だけ確定して書き込む。
+
+        以後Part/Assemblyの単価を変更しても、この注文の粗利は遡って変わらない
+        (sales_service.get_sales_summaryはOrderItem.costを直接読む)。
+        """
+        order_items = (
+            (await self._session.execute(select(OrderItem).where(OrderItem.order_id == order.id)))
+            .scalars()
+            .all()
+        )
+        cost_by_item = await compute_cost_by_order_item(self._session, [oi.id for oi in order_items])
+        for oi in order_items:
+            oi.cost = cost_by_item.get(oi.id, 0)
 
     async def _release(self, order: Order) -> None:
         reservations = await self._get_pending_reservations(order.id)

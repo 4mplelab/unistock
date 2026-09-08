@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.item_category import ItemCategory
 from app.models.order import DispatchStatus, Order, OrderItem
-from app.models.order_reservation import OrderPartReservation
-from app.models.part import Part
 from app.schemas.sales import (
     SalesSummaryCategoryProductRow,
     SalesSummaryCategoryRow,
@@ -14,13 +12,18 @@ from app.schemas.sales import (
     SalesSummaryProductRow,
     SalesSummaryRead,
 )
-from app.services.assembly_service import AssemblyService
+from app.services.data_reset_service import ConfirmationMismatchError
+from app.services.order_cost_service import compute_cost_by_order_item
 
 # 商品別ランキングの表示件数
 PRODUCT_RANKING_LIMIT = 10
 
 # カテゴリ未設定の商品をまとめるバケットのラベル
 UNCATEGORIZED_LABEL = "未分類"
+
+# 原価再計算(recalculate_order_item_costs)の実行に必須の確認文字列。
+# 全データ削除等と同様、破壊的(取り消せない)操作のため入力必須にしている
+RECALCULATE_COSTS_PHRASE = "原価を再計算"
 
 
 async def get_sales_summary(
@@ -48,11 +51,12 @@ async def get_sales_summary(
     この列も無い行(同様に機能追加より前の行)はprice×quantityにフォールバックする。
     いずれも送料・割引は含まれないため、総売上の内訳と厳密には一致しない参考値になる。
 
-    原価は、注文取り込み時点の部品引当(_reserve)が既に計算しorder_part_reservationsに
-    書き込み済みの「実際に消費した部品/中間品の内訳」を使う(BOMの条件判定をここで
-    再実装しない)。中間品原価は現在の単価(部品原価合計+中間品自身の追加費用)を使うため、
-    原価変動前の古い注文でも常に「現在の原価水準で計算した場合の粗利」を表す参考値になる。
-    引当情報が無い行(この機能より前の注文、BOM未設定でスキップされた行等)は原価0円として扱う。
+    原価はOrderItem.costをそのまま使う。この値は発送確定の瞬間に、その時点の部品構成
+    (order_part_reservations)×その時点の単価で一度だけ計算・確定した値(order_ingestion_service.
+    _confirm_order_item_costs参照)で、以後Part/Assemblyの単価を変更しても遡って変わらない。
+    未確定(この機能より前に発送確定した注文等)はNULLのまま残り、原価0円として扱う。単価を
+    見直した後、既存の発送済み注文にも反映したい場合は、ショップ設定の「原価を再計算する」で
+    現在の単価を使って明示的に上書きできる。
     """
     since = datetime.now(timezone.utc) - timedelta(days=days)
     # 集計キーとなる日付列。母集団(発送確定済みのみ)はどちらの基準でも変えない
@@ -70,6 +74,7 @@ async def get_sales_summary(
             OrderItem.quantity,
             OrderItem.price,
             OrderItem.total,
+            OrderItem.cost,
         )
         .select_from(Order)
         .join(OrderItem, OrderItem.order_id == Order.id)
@@ -84,8 +89,6 @@ async def get_sales_summary(
         base_query = base_query.where(Order.shop_id == shop_id)
     rows = (await session.execute(base_query)).all()
 
-    order_item_ids = [row[4] for row in rows]
-    cost_by_order_item = await _compute_cost_by_order_item(session, order_item_ids)
     categories_by_shop_item = await _fetch_categories_by_shop_item(
         session, {(row[1], row[5]) for row in rows}
     )
@@ -103,13 +106,27 @@ async def get_sales_summary(
     revenue_by_category_product: dict[tuple[tuple[int | None, str], str], int] = {}
     quantity_by_category_product: dict[tuple[tuple[int | None, str], str], int] = {}
 
-    for order_id, row_shop_id, order_total, bucket_date, order_item_id, item_id, title, quantity, price, item_total in rows:
+    cost_by_order_item: dict[int, int] = {}
+    for (
+        order_id,
+        row_shop_id,
+        order_total,
+        bucket_date,
+        order_item_id,
+        item_id,
+        title,
+        quantity,
+        price,
+        item_total,
+        item_cost_value,
+    ) in rows:
         item_price_sum = (price or 0) * quantity
         order_entry = orders.setdefault(
             order_id, {"total": order_total, "bucket_date": bucket_date, "item_sum": 0, "cost_sum": 0}
         )
         order_entry["item_sum"] += item_price_sum
-        item_cost = cost_by_order_item.get(order_item_id, 0)
+        item_cost = item_cost_value or 0
+        cost_by_order_item[order_item_id] = item_cost
         order_entry["cost_sum"] += item_cost
 
         item_revenue = item_total if item_total is not None else item_price_sum
@@ -241,35 +258,35 @@ async def _fetch_categories_by_shop_item(
     return result
 
 
-async def _compute_cost_by_order_item(session: AsyncSession, order_item_ids: list[int]) -> dict[int, int]:
-    """商品明細(order_item)ごとの原価を、実際に引当てた部品/中間品の内訳から算出する。"""
-    if not order_item_ids:
-        return {}
-
-    reservation_rows = (
-        await session.execute(
-            select(
-                OrderPartReservation.order_item_id,
-                OrderPartReservation.part_id,
-                OrderPartReservation.assembly_id,
-                func.sum(OrderPartReservation.quantity),
-            )
-            .where(OrderPartReservation.order_item_id.in_(order_item_ids))
-            .group_by(
-                OrderPartReservation.order_item_id,
-                OrderPartReservation.part_id,
-                OrderPartReservation.assembly_id,
-            )
+async def recalculate_order_item_costs(session: AsyncSession, shop_id: int, confirm_phrase: str) -> int:
+    """指定ショップの発送確定済み注文すべてについて、OrderItem.costを現在の単価で
+    再計算・上書きする。get_sales_summaryが読むのはOrderItem.costの確定値のみ
+    (単価変更を都度追従しない設計、sales_service.get_sales_summary参照)のため、
+    (1)この機能導入前に発送確定した注文の初回確定、(2)単価を見直した後に過去の
+    注文にも反映したい場合、のどちらかで管理者が明示的に実行する想定。
+    過去の粗利実績を書き換える取り消せない操作のため、確認文字列の入力を必須にする。
+    戻り値は更新した商品明細(order_item)の件数。
+    """
+    if confirm_phrase != RECALCULATE_COSTS_PHRASE:
+        raise ConfirmationMismatchError(
+            f"確認文字列が一致しません。「{RECALCULATE_COSTS_PHRASE}」と入力してください"
         )
-    ).all()
-    if not reservation_rows:
-        return {}
 
-    part_cost = dict((await session.execute(select(Part.id, Part.unit_cost))).all())
-    assembly_cost = await AssemblyService(session).compute_costs()
+    order_item_ids = (
+        await session.execute(
+            select(OrderItem.id)
+            .join(Order, Order.id == OrderItem.order_id)
+            .where(Order.shop_id == shop_id, Order.dispatch_status == DispatchStatus.DISPATCHED.value)
+        )
+    ).scalars().all()
+    if not order_item_ids:
+        return 0
 
-    cost_by_order_item: dict[int, int] = {}
-    for order_item_id, part_id, assembly_id, qty in reservation_rows:
-        unit_cost = part_cost.get(part_id, 0) if part_id is not None else assembly_cost.get(assembly_id, 0)
-        cost_by_order_item[order_item_id] = cost_by_order_item.get(order_item_id, 0) + (unit_cost or 0) * qty
-    return cost_by_order_item
+    cost_by_order_item = await compute_cost_by_order_item(session, order_item_ids)
+    order_items = (
+        await session.execute(select(OrderItem).where(OrderItem.id.in_(order_item_ids)))
+    ).scalars().all()
+    for oi in order_items:
+        oi.cost = cost_by_order_item.get(oi.id, 0)
+    await session.commit()
+    return len(order_items)

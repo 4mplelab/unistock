@@ -752,6 +752,17 @@ export function resetOrderHistory(confirmPhrase: string): Promise<void> {
   });
 }
 
+export function fetchRecalculateCostsPhrase(): Promise<{ phrase: string }> {
+  return request("/sales/recalculate-costs-phrase");
+}
+
+export function recalculateCosts(shopId: number, confirmPhrase: string): Promise<{ updated_count: number }> {
+  return request<{ updated_count: number }>(`/sales/recalculate-costs?shop_id=${shopId}`, {
+    method: "POST",
+    body: JSON.stringify({ confirm_phrase: confirmPhrase }),
+  });
+}
+
 export interface RetentionCleanupResult {
   orders: number;
   purchase_orders: number;

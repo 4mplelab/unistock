@@ -1,6 +1,6 @@
 from datetime import date
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SalesSummaryPoint(BaseModel):
@@ -50,3 +50,7 @@ class SalesSummaryRead(BaseModel):
     points: list[SalesSummaryPoint]
     products: list[SalesSummaryProductRow]
     categories: list[SalesSummaryCategoryRow]
+
+
+class RecalculateCostsRequest(BaseModel):
+    confirm_phrase: str = Field(min_length=1)

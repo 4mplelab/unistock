@@ -63,7 +63,10 @@ class Order(Base):
 
 class OrderItem(Base):
     __tablename__ = "order_items"
-    __table_args__ = (CheckConstraint("total IS NULL OR total >= 0", name="ck_order_items_total"),)
+    __table_args__ = (
+        CheckConstraint("total IS NULL OR total >= 0", name="ck_order_items_total"),
+        CheckConstraint("cost IS NULL OR cost >= 0", name="ck_order_items_cost"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False)
@@ -76,6 +79,12 @@ class OrderItem(Base):
     # 新規取り込み時にのみ設定する(price同様、成立後に値が変わることは想定しない)。
     # この列追加より前に取り込まれた行はNULLのまま残る
     total: Mapped[int | None] = mapped_column(Integer)
+    # 発送確定(dispatched)の瞬間の部品構成(order_part_reservations)×その時点の単価で
+    # 一度だけ計算し、以後は変更しない確定値。単価を後から変更しても過去の注文の粗利が
+    # 遡って変わらないようにするための設計(sales_service.get_sales_summary参照)。
+    # 発送確定前の注文、未確定注文、この列追加より前に発送確定した注文はNULLのまま残り、
+    # 後者は「原価を再計算する」機能(ShopConnectionCard)で一括確定できる
+    cost: Mapped[int | None] = mapped_column(Integer)
     # BASEの単一属性バリエーション(例: 色)。option_id等を持つ「options」(OrderItemOption)とは別の仕組み。
     variation_id: Mapped[str | None] = mapped_column(String(64))
     variation: Mapped[str | None] = mapped_column(String(255))
