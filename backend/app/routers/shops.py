@@ -3,10 +3,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
-from app.schemas.shop import ShopCreate, ShopRead, ShopUpdate
+from app.schemas.shop import ShopCreate, ShopDeleteRequest, ShopRead, ShopUpdate
 from app.services.auth_service import require_admin, require_auth
+from app.services.data_reset_service import ConfirmationMismatchError
 from app.services.demo_seed_service import seed_demo_data_for_shop
-from app.services.shop_service import ShopHasDataError, ShopNotFoundError, ShopService
+from app.services.shop_service import DELETE_SHOP_PHRASE, ShopNotFoundError, ShopService
 
 router = APIRouter(prefix="/api/shops", tags=["shops"], dependencies=[Depends(require_auth)])
 
@@ -54,12 +55,18 @@ async def update_shop(shop_id: int, body: ShopUpdate, session: AsyncSession = De
     return ShopRead.model_validate(shop)
 
 
+@router.get("/delete-phrase")
+async def shop_delete_phrase() -> dict[str, str]:
+    """確認ダイアログに表示する、入力必須の確認文字列をフロントへ渡す。"""
+    return {"phrase": DELETE_SHOP_PHRASE}
+
+
 @router.delete("/{shop_id}", status_code=204, dependencies=[Depends(require_admin)])
-async def delete_shop(shop_id: int, session: AsyncSession = Depends(get_db)) -> None:
+async def delete_shop(shop_id: int, body: ShopDeleteRequest, session: AsyncSession = Depends(get_db)) -> None:
     service = ShopService(session)
     try:
-        await service.delete_shop(shop_id)
+        await service.delete_shop(shop_id, body.confirm_phrase)
     except ShopNotFoundError as e:
         raise HTTPException(status_code=404, detail="ショップが見つかりません") from e
-    except ShopHasDataError as e:
+    except ConfirmationMismatchError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e

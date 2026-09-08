@@ -144,8 +144,15 @@ export function updateShop(shopId: number, input: ShopUpdateInput): Promise<Shop
   return request<Shop>(`/shops/${shopId}`, { method: "PATCH", body: JSON.stringify(input) });
 }
 
-export function deleteShop(shopId: number): Promise<void> {
-  return request<void>(`/shops/${shopId}`, { method: "DELETE" });
+export function fetchShopDeletePhrase(): Promise<{ phrase: string }> {
+  return request("/shops/delete-phrase");
+}
+
+export function deleteShop(shopId: number, confirmPhrase: string): Promise<void> {
+  return request<void>(`/shops/${shopId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ confirm_phrase: confirmPhrase }),
+  });
 }
 
 export function seedDemoDataForShop(shopId: number): Promise<{ seeded: boolean }> {

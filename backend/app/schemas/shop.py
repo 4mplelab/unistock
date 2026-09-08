@@ -23,3 +23,7 @@ class ShopUpdate(BaseModel):
     is_active: bool | None = None
     # 現状はbase→manual(手動管理化)のみ許可。それ以外の遷移はShopServiceで拒否する
     platform: str | None = None
+
+
+class ShopDeleteRequest(BaseModel):
+    confirm_phrase: str

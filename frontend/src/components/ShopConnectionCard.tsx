@@ -1,21 +1,33 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check } from "lucide-react";
-import { deleteShop, updateShop } from "@/api/client";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, MoreVertical } from "lucide-react";
+import {
+  deleteShop,
+  fetchRecalculateCostsPhrase,
+  fetchShopDeletePhrase,
+  recalculateCosts,
+  updateShop,
+} from "@/api/client";
 import type { Shop } from "@/types/shop";
 import { platformLabel } from "@/lib/platforms";
 import ShopOAuthConnect from "@/components/ShopOAuthConnect";
 import ShopUrlTemplates from "@/components/ShopUrlTemplates";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import SaveFlashCheck from "@/components/SaveFlashCheck";
 import FieldError from "@/components/FieldError";
+import Hint from "@/components/Hint";
 import { useSaveFeedback } from "@/hooks/useSaveFeedback";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -28,12 +40,10 @@ import {
 export default function ShopConnectionCard({
   shop,
   demoMode,
-  canDelete,
   isOnlyActiveShop,
 }: {
   shop: Shop;
   demoMode: boolean;
-  canDelete: boolean;
   // trueの間は有効/無効の切り替えを止める。唯一有効なショップを無効化すると、
   // BOM編集・リストック予約作成などのショップ選択が空になり操作できなくなるため
   isOnlyActiveShop: boolean;
@@ -44,8 +54,23 @@ export default function ShopConnectionCard({
   const [nameInput, setNameInput] = useState(shop.name);
   useEffect(() => setNameInput(shop.name), [shop.name]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
   const [confirmManualOpen, setConfirmManualOpen] = useState(false);
+  const [confirmCostsOpen, setConfirmCostsOpen] = useState(false);
+  const [costsConfirmInput, setCostsConfirmInput] = useState("");
   const feedback = useSaveFeedback();
+
+  const { data: deletePhrase } = useQuery({
+    queryKey: ["shop-delete-phrase"],
+    queryFn: fetchShopDeletePhrase,
+    enabled: confirmDeleteOpen,
+  });
+
+  const { data: costsPhrase } = useQuery({
+    queryKey: ["recalculate-costs-phrase"],
+    queryFn: fetchRecalculateCostsPhrase,
+    enabled: confirmCostsOpen,
+  });
 
   const convertToManualMutation = useMutation({
     mutationFn: () => updateShop(shop.id, { platform: "manual" }),
@@ -64,7 +89,7 @@ export default function ShopConnectionCard({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["shops"] }),
   });
   const deleteMutation = useMutation({
-    mutationFn: () => deleteShop(shop.id),
+    mutationFn: (phrase: string) => deleteShop(shop.id, phrase),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["shops"] });
       // 削除完了のチェック表示を一瞬見せてからダイアログを閉じる(即座に閉じると
@@ -74,11 +99,30 @@ export default function ShopConnectionCard({
     },
   });
 
+  function openDeleteDialog() {
+    setConfirmDeleteOpen(true);
+    setDeleteConfirmInput("");
+    deleteMutation.reset();
+  }
+
+  const recalculateCostsMutation = useMutation({
+    mutationFn: (phrase: string) => recalculateCosts(shop.id, phrase),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sales-summary"] });
+    },
+  });
+
+  function openCostsDialog() {
+    setConfirmCostsOpen(true);
+    setCostsConfirmInput("");
+    recalculateCostsMutation.reset();
+  }
+
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-auto items-center gap-2">
             <Badge variant="secondary" className="shrink-0">
               {platformLabel(shop.platform)}
             </Badge>
@@ -90,42 +134,46 @@ export default function ShopConnectionCard({
                 nameInput !== shop.name &&
                 renameMutation.mutate(nameInput.trim(), feedback.callbacks("rename"))
               }
-              className="h-8 max-w-56"
+              className="h-8 min-w-32 max-w-56 flex-1"
             />
             <SaveFlashCheck show={feedback.isFlashing("rename")} />
-          </div>
-          <div className="flex shrink-0 items-center gap-3">
-            <Label htmlFor={`active-${shop.id}`} className="text-xs text-muted-foreground">
-              有効
-            </Label>
-            <SaveFlashCheck show={feedback.isFlashing("active")} />
-            <Switch
-              id={`active-${shop.id}`}
-              checked={shop.is_active}
-              onCheckedChange={(checked) => toggleActiveMutation.mutate(checked, feedback.callbacks("active"))}
-              disabled={shop.is_active && isOnlyActiveShop}
-              title={
+            <Hint
+              label={
                 shop.is_active && isOnlyActiveShop
                   ? "唯一の有効なショップです。無効化するとBOM編集等でショップを選べなくなります"
-                  : undefined
+                  : shop.is_active
+                    ? "有効"
+                    : "無効"
               }
-            />
-            {isOAuthPlatform && (
-              <Button variant="ghost" size="sm" onClick={() => setConfirmManualOpen(true)}>
-                手動管理に切り替える
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={() => setConfirmDeleteOpen(true)}
-              disabled={!canDelete}
-              title={!canDelete ? "このショップには注文/BOM等のデータが残っているため削除できません" : undefined}
             >
-              削除
-            </Button>
+              <span className="inline-flex shrink-0">
+                <Switch
+                  id={`active-${shop.id}`}
+                  aria-label="有効"
+                  checked={shop.is_active}
+                  onCheckedChange={(checked) => toggleActiveMutation.mutate(checked, feedback.callbacks("active"))}
+                  disabled={shop.is_active && isOnlyActiveShop}
+                />
+              </span>
+            </Hint>
+            <SaveFlashCheck show={feedback.isFlashing("active")} />
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+              aria-label="その他の操作"
+            >
+              <MoreVertical />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              {isOAuthPlatform && (
+                <DropdownMenuItem onClick={() => setConfirmManualOpen(true)}>手動管理に切り替える</DropdownMenuItem>
+              )}
+              <DropdownMenuItem variant="destructive" onClick={openDeleteDialog}>
+                削除
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <FieldError message={feedback.errorFor("rename")} />
         <FieldError message={feedback.errorFor("active")} />
@@ -152,6 +200,18 @@ export default function ShopConnectionCard({
         )}
 
         <ShopUrlTemplates shopId={shop.id} demoMode={demoMode} platform={shop.platform} />
+
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+          <div>
+            <div className="text-sm font-medium">原価を再計算する</div>
+            <p className="text-xs text-muted-foreground">
+              発送確定済みの全注文の原価を、現在の部品・中間品の単価で再計算し直します
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={openCostsDialog} disabled={demoMode}>
+            再計算する
+          </Button>
+        </div>
       </CardContent>
 
       <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
@@ -159,9 +219,16 @@ export default function ShopConnectionCard({
           <DialogHeader>
             <DialogTitle>ショップを削除しますか？</DialogTitle>
             <DialogDescription>
-              「{shop.name}」を削除します。この操作は取り消せません。注文/BOM等のデータが残っている場合は削除できません。
+              「{shop.name}」と、紐づく注文・BOM・発注・リストック予約・手動登録商品・在庫変動履歴などのデータを
+              全て完全に削除します。部品・中間品マスタ自体は他ショップと共有のため削除されません。
+              この操作は取り消せません。続ける場合は下に「{deletePhrase?.phrase ?? "..."}」と入力してください。
             </DialogDescription>
           </DialogHeader>
+          <Input
+            value={deleteConfirmInput}
+            onChange={(e) => setDeleteConfirmInput(e.target.value)}
+            placeholder={deletePhrase?.phrase}
+          />
           {deleteMutation.error && (
             <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {(deleteMutation.error as Error).message}
@@ -173,8 +240,8 @@ export default function ShopConnectionCard({
             </Button>
             <Button
               variant="destructive"
-              disabled={deleteMutation.isPending}
-              onClick={() => deleteMutation.mutate()}
+              disabled={!deletePhrase || deleteConfirmInput !== deletePhrase.phrase || deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate(deleteConfirmInput)}
             >
               {feedback.isFlashing("delete") ? (
                 <span className="inline-flex items-center gap-1">
@@ -212,6 +279,46 @@ export default function ShopConnectionCard({
             </Button>
             <Button disabled={convertToManualMutation.isPending} onClick={() => convertToManualMutation.mutate()}>
               {convertToManualMutation.isPending ? "切り替え中..." : "手動管理に切り替える"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmCostsOpen} onOpenChange={setConfirmCostsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>原価を再計算しますか？</DialogTitle>
+            <DialogDescription>
+              「{shop.name}」の発送確定済み全注文の原価を、現在の部品・中間品の単価で再計算して上書きします。
+              過去の売上ページに表示される粗利の実績値が変わります。この操作は取り消せません。
+              続ける場合は下に「{costsPhrase?.phrase ?? "..."}」と入力してください。
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={costsConfirmInput}
+            onChange={(e) => setCostsConfirmInput(e.target.value)}
+            placeholder={costsPhrase?.phrase}
+          />
+          {recalculateCostsMutation.error && (
+            <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {(recalculateCostsMutation.error as Error).message}
+            </p>
+          )}
+          {recalculateCostsMutation.isSuccess && (
+            <p className="rounded-lg bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400">
+              {recalculateCostsMutation.data.updated_count}件の商品明細を再計算しました
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCostsOpen(false)}>
+              閉じる
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!costsPhrase || costsConfirmInput !== costsPhrase.phrase || recalculateCostsMutation.isPending}
+              onClick={() => recalculateCostsMutation.mutate(costsConfirmInput)}
+            >
+              {recalculateCostsMutation.isPending ? "再計算中..." : "再計算する"}
             </Button>
           </DialogFooter>
         </DialogContent>
