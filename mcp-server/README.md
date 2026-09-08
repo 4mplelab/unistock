@@ -1,11 +1,12 @@
 # UniStock MCP サーバー
 
 UniStockの在庫・注文・発注・売上データを、Claude Desktop / Claude Code / Cursorなど
-MCP対応のAIクライアントから参照できるようにするサーバーです。
+MCP対応のAIクライアントから参照・操作できるようにするサーバーです。
 
-現時点では**読み取り専用**です(在庫を減らす・発注する等の書き込み操作は含みません)。
 UniStockの既存REST APIを、APIキー(Bearer認証)付きのHTTPリクエストで呼ぶだけの薄い
-ラッパーで、UniStock本体のDBには直接触れません。
+ラッパーで、UniStock本体のDBには直接触れません。書き込み系ツールもAPIキー
+(`require_auth`)で通る範囲のみで、ショップ削除等の管理者専用操作は含みません。
+詳細は「提供ツール一覧」を参照。
 
 動かし方は2通りあります。
 
@@ -44,33 +45,33 @@ UniStockの既存REST APIを、APIキー(Bearer認証)付きのHTTPリクエス�
    docker compose up -d mcp-server
    ```
 
-4. Claude Desktopの設定ファイル(macOSなら
-   `~/Library/Application Support/Claude/claude_desktop_config.json`)に追加する。
+4. 設定ファイルに追加する。
 
-   ```json
-   {
-     "mcpServers": {
-       "unistock": {
-         "url": "http://UniStockを動かしているマシンのIP:8765/mcp",
-         "headers": {
-           "Authorization": "Bearer 手順1で用意した値"
-         }
-       }
-     }
-   }
-   ```
-
-   Claude Codeの場合はコマンドで追加する。
+   **Claude Code**は`.mcp.json`やCLIでリモート(HTTP)サーバーをそのまま扱える。
 
    ```bash
    claude mcp add --transport http unistock http://UniStockを動かしているマシンのIP:8765/mcp \
      --header "Authorization: Bearer 手順1で用意した値"
    ```
 
-   保存後、Claude Desktopは再起動する。チャット入力欄近くのツールアイコンから、
-   UniStockのツール(`list_parts`等)が読み込まれていることを確認する。
+   ```json
+   {
+     "mcpServers": {
+       "unistock": {
+         "command": "npx",
+         "args": [
+           "mcp-remote",
+           "http://UniStockを動かしているマシンのIP:8765/mcp",
+           "--allow-http",
+           "--header",
+           "Authorization: Bearer 手順1で用意した値"
+         ]
+       }
+     }
+   }
+   ```
 
-   ヘッダーが無い/違う場合は401を返す。
+   `https://`の場合は`--allow-http`不要。
 
 ## ローカル型(AIアプリがプロセス起動)のセットアップ
 
@@ -140,6 +141,20 @@ UniStockの既存REST APIを、APIキー(Bearer認証)付きのHTTPリクエス�
 | `get_order` | 注文1件の明細 |
 | `list_purchase_orders` | 発注一覧 |
 | `get_sales_summary` | 売上・原価・粗利のサマリ(商品別ランキング・カテゴリ別内訳込み)。`start_date`/`end_date`で任意の期間(暦月等)を指定可能、省略時は直近`days`日間 |
+
+## 提供ツール一覧(書き込み系)
+
+BASEには一切書き込まず、UniStock内部で完結する操作のみ含む。例外は`create_restock_schedule`だけで、指定日時にBASE等への在庫反映が発生しうる。
+
+| ツール名 | 内容 |
+|---|---|
+| `create_purchase_order` / `receive_purchase_order` / `undo_receive_purchase_order` / `cancel_purchase_order` | 発注の登録・入荷・入荷取消・キャンセル |
+| `update_dispatch_status` / `undo_dispatch` | 注文の発送確定・取消。**手動ショップ(外部EC非連携)限定**。BASE連携ショップの注文には使えない(バックエンド側の制約により拒否される) |
+| `create_part` / `add_part_stock` | 部品の新規登録・在庫加算 |
+| `create_assembly` / `replace_assembly_recipe` / `build_assembly` | 中間品の新規登録・レシピ置換・組み立て |
+| `create_bom_item` / `update_bom_item` | 商品のBOM行の追加・数量更新 |
+| `create_restock_schedule` | リストック予約の作成。実行予定時刻が12時間以内の場合、`confirm=true`を明示しない限り作成されず、確認を促すメッセージを返す |
+| `cancel_restock_schedule` | 未実行のリストック予約のキャンセル |
 
 ## 注意事項
 
