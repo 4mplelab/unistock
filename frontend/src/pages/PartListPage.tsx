@@ -318,9 +318,9 @@ export default function PartListPage() {
                   <TableHead>名前</TableHead>
                   <TableHead>SKU</TableHead>
                   {!groupSort && <TableHead>グループ</TableHead>}
-                  <TableHead>利用可能</TableHead>
-                  <TableHead>発注点</TableHead>
-                  <TableHead>単価</TableHead>
+                  <TableHead className="w-28 text-center">利用可能</TableHead>
+                  <TableHead className="w-28 text-center">発注点</TableHead>
+                  <TableHead className="w-28 text-center">単価</TableHead>
                   <TableHead className="sticky right-0 bg-muted px-2 last:pr-2"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -379,7 +379,7 @@ export default function PartListPage() {
                       </TableCell>
                     )}
                     <TableCell>
-                      <div className="flex h-full items-center gap-2">
+                      <div className="flex h-full items-center justify-end gap-2">
                         <Hint label={p.reserved > 0 ? `在庫${formatNumber(p.stock)} - 引当${formatNumber(p.reserved)}` : null}>
                           <span
                             className={cn(

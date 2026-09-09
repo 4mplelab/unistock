@@ -6,6 +6,7 @@ import {
   deleteAssembly,
   exportAssembliesCsv,
   fetchAssemblies,
+  fetchAssembliesBuildableAvailable,
   fetchAssembliesCosts,
   fetchAssemblyReservations,
   importAssembliesCsv,
@@ -101,6 +102,11 @@ export default function AssemblyListPage() {
     queryFn: fetchAssembliesCosts,
   });
   const costById = new Map((costsQuery.data ?? []).map((c) => [c.id, c.cost]));
+  const buildableQuery = useQuery({
+    queryKey: ["assemblies", "buildable-available"],
+    queryFn: fetchAssembliesBuildableAvailable,
+  });
+  const buildableById = new Map((buildableQuery.data ?? []).map((b) => [b.id, b.available]));
 
   const deleteMutation = useMutation({
     mutationFn: deleteAssembly,
@@ -289,8 +295,9 @@ export default function AssemblyListPage() {
                   <TableHead>名前</TableHead>
                   <TableHead>SKU</TableHead>
                   {!groupSort && <TableHead>グループ</TableHead>}
-                  <TableHead>利用可能</TableHead>
-                  <TableHead>原価</TableHead>
+                  <TableHead className="w-28 text-center">利用可能</TableHead>
+                  <TableHead className="w-28 text-center">作成可能数</TableHead>
+                  <TableHead className="w-28 text-center">原価</TableHead>
                   <TableHead className="sticky right-0 bg-muted px-2 last:pr-2"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -302,7 +309,7 @@ export default function AssemblyListPage() {
                     {showGroupHeader && (
                       <TableRow className="hover:bg-transparent">
                         <TableCell
-                          colSpan={groupSort ? 5 : 6}
+                          colSpan={groupSort ? 6 : 7}
                           className="bg-muted py-2.5 text-sm font-semibold text-foreground"
                         >
                           {a.group || "グループ未設定"}
@@ -334,7 +341,7 @@ export default function AssemblyListPage() {
                       </TableCell>
                     )}
                     <TableCell>
-                      <div className="flex h-full items-center gap-2">
+                      <div className="flex h-full items-center justify-end gap-2">
                         <Hint label={a.reserved > 0 ? `在庫${formatNumber(a.stock)} - 引当${formatNumber(a.reserved)}` : null}>
                           <span
                             className={cn(
@@ -357,6 +364,17 @@ export default function AssemblyListPage() {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {buildableById.has(a.id) && (
+                        <span
+                          className={cn(
+                            (buildableById.get(a.id) ?? 0) <= 0 && "font-semibold text-destructive"
+                          )}
+                        >
+                          {formatNumber(buildableById.get(a.id) ?? 0)}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       <Hint
