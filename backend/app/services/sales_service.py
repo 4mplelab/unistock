@@ -309,7 +309,7 @@ async def recalculate_order_item_costs(session: AsyncSession, shop_id: int, conf
     if not order_item_ids:
         return 0
 
-    cost_by_order_item = await compute_cost_by_order_item(session, order_item_ids)
+    cost_by_order_item = await compute_cost_by_order_item(session, order_item_ids, shop_id)
     order_items = (
         await session.execute(select(OrderItem).where(OrderItem.id.in_(order_item_ids)))
     ).scalars().all()

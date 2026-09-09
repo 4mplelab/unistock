@@ -310,11 +310,14 @@ export default function SalesPage() {
           </CardContent>
         </Card>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground-subtle">
-        原価は部品/中間品に単価を設定した場合のみ計算されます(未設定の部品/中間品は0円扱い)。
-        中間品の原価は現在の設定値(組成の部品原価合計+中間品自身の追加費用)で計算するため、
-        原価変更前の古い注文でも常に現在の原価水準での参考値になります。
-      </p>
+      <div className="mt-2 space-y-1 text-xs text-muted-foreground-subtle">
+        <p>原価は部品/中間品に単価を設定した場合のみ計算されます(未設定の部品/中間品は0円扱い)。</p>
+        <p>
+          中間品の原価は現在の設定値(組成の部品原価合計+中間品自身の追加費用)で計算するため、
+          原価変更前の古い注文でも常に現在の原価水準での参考値になります。
+        </p>
+        <p>なお、発送確定時点で部品引当が記録されていない一部の注文は、現在のBOM構成をもとにした参考値です。</p>
+      </div>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">

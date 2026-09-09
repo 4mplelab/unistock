@@ -848,7 +848,7 @@ class OrderIngestionService:
             .scalars()
             .all()
         )
-        cost_by_item = await compute_cost_by_order_item(self._session, [oi.id for oi in order_items])
+        cost_by_item = await compute_cost_by_order_item(self._session, [oi.id for oi in order_items], order.shop_id)
         for oi in order_items:
             oi.cost = cost_by_item.get(oi.id, 0)
 
