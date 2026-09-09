@@ -531,7 +531,7 @@ function ShopSwitcher({ isAdmin }: { isAdmin: boolean }) {
         <Hint label="操作対象のショップを切り替える">
           <DropdownMenuTrigger className={cn(topBarIconButtonClass, "w-auto gap-1.5 px-2")}>
             <Store className="size-4 shrink-0" />
-            <span className="max-w-32 truncate text-xs font-medium">
+            <span className="max-w-20 truncate text-xs font-medium sm:max-w-32">
               {currentShop?.name ?? "ショップ未選択"}
             </span>
             <span
@@ -745,7 +745,7 @@ export default function AppShell() {
           <div className="flex min-w-0 items-center gap-2 pl-1">
             <LogoMark className="size-12 shrink-0" />
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <div className="truncate text-3xl font-bold tracking-tight">UniStock</div>
                 <DemoModeBadge />
               </div>
@@ -755,9 +755,11 @@ export default function AppShell() {
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <ShopSwitcher isAdmin={currentUser.is_admin} />
-          <ThemeToggleButton />
+          <div className="hidden sm:contents">
+            <ThemeToggleButton />
+            <DocsLinkButton />
+          </div>
           <NotificationBell isAdmin={currentUser.is_admin} />
-          <DocsLinkButton />
           <UserMenu user={currentUser} />
         </div>
       </header>
