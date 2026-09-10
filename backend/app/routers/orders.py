@@ -3,7 +3,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.assembly import Assembly
 from app.models.order import Order, OrderItem, OrderItemOption
+from app.models.part import Part
 from app.schemas.order import (
     IngestionResultRead,
     OrderDispatchStatusUpdate,
@@ -12,13 +14,18 @@ from app.schemas.order import (
     OrderItemRead,
     OrderListRead,
     OrderRead,
+    OrderRetryReservationRequest,
+    OrderRetryReservationResult,
+    ReservationDiffEntryRead,
 )
 from app.schemas.order_summary import OrderSummaryRead
+from app.providers.factory import build_provider
 from app.providers.manual_ec import ManualECProvider
 from app.services.auth_service import require_auth
 from app.services.order_ingestion_service import OrderIngestionService
 from app.services.order_scheduler import run_sync_once
 from app.services.order_summary_service import get_order_summary
+from app.services.shop_service import ShopService
 
 router = APIRouter(prefix="/api/orders", tags=["orders"], dependencies=[Depends(require_auth)])
 
@@ -231,6 +238,54 @@ async def undo_manual_order_dispatch(order_id: int, session: AsyncSession = Depe
     items = items_map.get(order.id, [])
     options_map = await _load_options_map(session, [i.id for i in items])
     return _to_read(order, items, options_map)
+
+
+@router.post("/{order_id}/retry-reservation", response_model=OrderRetryReservationResult)
+async def retry_order_reservation(
+    order_id: int, body: OrderRetryReservationRequest, session: AsyncSession = Depends(get_db)
+) -> OrderRetryReservationResult:
+    """部品引当(reserved)をreservation_appliedの状態を問わず強制的に再計算する
+    (BOM修正後の救済用)。在庫(stock)には一切触れない(在庫の調整はユーザーが行う前提)。
+
+    body.order_item_idsが指定されればその商品だけ、未指定なら注文内の全商品が対象。
+    プラットフォーム問わず許可する点がundo-dispatch(手動ショップのみ)と異なる。
+    """
+    order = await session.get(Order, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail=f"order {order_id} not found")
+
+    shop = await ShopService(session).get_shop(order.shop_id)
+    provider = build_provider(shop, session)
+    service = OrderIngestionService(session, provider, order.shop_id)
+    diffs = await service.force_retry_reservation(order, body.order_item_ids)
+
+    part_ids = [d.component_id for d in diffs if d.component_type == "part"]
+    assembly_ids = [d.component_id for d in diffs if d.component_type == "assembly"]
+    part_names: dict[int, str] = {}
+    assembly_names: dict[int, str] = {}
+    if part_ids:
+        result = await session.execute(select(Part.id, Part.name).where(Part.id.in_(part_ids)))
+        part_names = dict(result.all())
+    if assembly_ids:
+        result = await session.execute(select(Assembly.id, Assembly.name).where(Assembly.id.in_(assembly_ids)))
+        assembly_names = dict(result.all())
+
+    diff_reads = [
+        ReservationDiffEntryRead(
+            component_type=d.component_type,
+            component_id=d.component_id,
+            component_name=(part_names if d.component_type == "part" else assembly_names).get(d.component_id),
+            before=d.before,
+            after=d.after,
+        )
+        for d in diffs
+    ]
+
+    await session.refresh(order)
+    items_map = await _load_items_map(session, [order.id])
+    items = items_map.get(order.id, [])
+    options_map = await _load_options_map(session, [i.id for i in items])
+    return OrderRetryReservationResult(order=_to_read(order, items, options_map), diffs=diff_reads)
 
 
 @router.post("/sync", response_model=IngestionResultRead)

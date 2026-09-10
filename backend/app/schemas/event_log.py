@@ -15,6 +15,8 @@ class EventLogRead(BaseModel):
     item_id: str | None
     shop_id: int | None
     created_at: datetime
+    occurrence_count: int
+    last_occurred_at: datetime
 
 
 class EventLogListRead(BaseModel):

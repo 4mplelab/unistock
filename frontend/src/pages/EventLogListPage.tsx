@@ -145,7 +145,12 @@ export default function EventLogListPage() {
                     className={cn("transition-colors duration-1000", log.id === flashId && "bg-amber-100 dark:bg-amber-500/20")}
                   >
                     <TableCell className="whitespace-nowrap">
-                      {formatDateTime(log.created_at)}
+                      {formatDateTime(log.last_occurred_at)}
+                      {log.occurrence_count > 1 && (
+                        <span className="ml-1.5 text-xs text-muted-foreground-subtle">
+                          ({log.occurrence_count}回)
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge className={cn("border-transparent", LEVEL_CLASS[log.level])}>

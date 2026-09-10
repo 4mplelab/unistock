@@ -44,7 +44,7 @@ import type {
   BomProductSetting,
   BomReplaceInput,
 } from "../types/bom";
-import type { IngestionResult, Order, OrderListResult } from "../types/order";
+import type { IngestionResult, Order, OrderListResult, OrderRetryReservationResult } from "../types/order";
 import type { OrderSummary } from "../types/order_summary";
 import type {
   LeadTimeSummary,
@@ -571,6 +571,16 @@ export function updateOrderDispatchStatus(orderId: number, dispatchStatus: strin
 
 export function undoOrderDispatch(orderId: number): Promise<Order> {
   return request<Order>(`/orders/${orderId}/undo-dispatch`, { method: "POST" });
+}
+
+export function retryOrderReservation(
+  orderId: number,
+  orderItemIds?: number[]
+): Promise<OrderRetryReservationResult> {
+  return request<OrderRetryReservationResult>(`/orders/${orderId}/retry-reservation`, {
+    method: "POST",
+    body: JSON.stringify({ order_item_ids: orderItemIds ?? null }),
+  });
 }
 
 export function fetchOrder(orderId: number): Promise<Order> {

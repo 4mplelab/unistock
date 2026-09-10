@@ -626,7 +626,8 @@ export default function DashboardPage() {
                         {EVENT_LOG_CATEGORY_LABEL[log.category] ?? log.category}
                       </span>
                       <span className="ml-auto shrink-0 text-xs text-muted-foreground-subtle">
-                        {formatDate(log.created_at)}
+                        {formatDate(log.last_occurred_at)}
+                        {log.occurrence_count > 1 && ` (${log.occurrence_count}回)`}
                       </span>
                     </div>
                     <p className="line-clamp-2 text-muted-foreground">{log.message}</p>

@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Check, ListChecks, MoreVertical, Truck } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchOrders, syncOrdersNow, undoOrderDispatch, updateOrderDispatchStatus } from "../api/client";
+import {
+  fetchOrders,
+  retryOrderReservation,
+  syncOrdersNow,
+  undoOrderDispatch,
+  updateOrderDispatchStatus,
+} from "../api/client";
 import ManualOrderCsvImportDialog from "@/components/ManualOrderCsvImportDialog";
-import type { Order } from "../types/order";
+import ReservationRetryResultDialog from "@/components/ReservationRetryResultDialog";
+import type { Order, OrderRetryReservationResult } from "../types/order";
 import { useShopContext } from "@/contexts/ShopContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -131,12 +138,16 @@ function OrderStatusCell({ order, fullyPicked }: { order: Order; fullyPicked: bo
   );
 }
 
-// 右端の操作列: 手動ショップの注文だけ、編集・キャンセル(未対応)/発送取消し(発送済み)を
+// 右端の操作列: 手動ショップの注文は編集・キャンセル(未対応)/発送取消し(発送済み)を、
+// プラットフォーム問わず「BOM更新」(BOM修正後、引当が反映されない場合の救済用)を
 // ⋮メニューにまとめる(他の一覧画面(発注管理等)の「右端の⋮メニュー」パターンに揃える)
 function OrderRowActions({ order }: { order: Order }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [retryConfirmOpen, setRetryConfirmOpen] = useState(false);
+  const [retryResultOpen, setRetryResultOpen] = useState(false);
+  const [retryResult, setRetryResult] = useState<OrderRetryReservationResult | null>(null);
   const feedback = useSaveFeedback();
   const mutation = useMutation({
     mutationFn: () => updateOrderDispatchStatus(order.id, "cancelled"),
@@ -153,47 +164,24 @@ function OrderRowActions({ order }: { order: Order }) {
       queryClient.invalidateQueries({ queryKey: ["nav-counts"] });
     },
   });
+  const retryReservationMutation = useMutation({
+    mutationFn: () => retryOrderReservation(order.id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["nav-counts"] });
+      queryClient.invalidateQueries({ queryKey: ["order-summary"] });
+      setRetryConfirmOpen(false);
+      setRetryResult(result);
+      setRetryResultOpen(true);
+    },
+  });
 
-  if (order.platform !== "manual") {
-    return null;
-  }
-
-  // 発送済み: 誤操作の救済用に発送取消し(部品の消費を取り消し、未対応へ戻す)だけを出す
-  if (order.dispatch_status === "dispatched") {
-    return (
-      <div className="flex items-center gap-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-            aria-label="その他の操作"
-          >
-            <MoreVertical />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent>
-            <DropdownMenuItem
-              variant="destructive"
-              disabled={undoDispatchMutation.isPending}
-              onClick={() => undoDispatchMutation.mutate(undefined, feedback.callbacks("undo-dispatch"))}
-            >
-              発送取消し
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {feedback.errorFor("undo-dispatch") && (
-          <Hint label={feedback.errorFor("undo-dispatch")}>
-            <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
-          </Hint>
-        )}
-      </div>
-    );
-  }
-
-  if (order.dispatch_status !== "ordered") {
-    return null;
-  }
+  const isManual = order.platform === "manual";
+  const isDispatched = order.dispatch_status === "dispatched";
+  const isOrdered = order.dispatch_status === "ordered";
 
   return (
-    <>
+    <div className="flex items-center gap-1">
       <DropdownMenu>
         <DropdownMenuTrigger
           className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
@@ -202,37 +190,108 @@ function OrderRowActions({ order }: { order: Order }) {
           <MoreVertical />
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          <DropdownMenuItem onClick={() => navigate(`/orders/${order.id}/edit`)}>編集</DropdownMenuItem>
-          <DropdownMenuItem variant="destructive" onClick={() => setCancelOpen(true)}>
-            キャンセル
+          {isManual && isOrdered && (
+            <DropdownMenuItem onClick={() => navigate(`/orders/${order.id}/edit`)}>編集</DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            className="text-amber-700 data-highlighted:bg-amber-100 data-highlighted:text-amber-800 dark:text-amber-400 dark:data-highlighted:bg-amber-500/20 dark:data-highlighted:text-amber-300"
+            disabled={retryReservationMutation.isPending}
+            onClick={() => {
+              if (isDispatched) {
+                setRetryConfirmOpen(true);
+              } else {
+                retryReservationMutation.mutate(undefined, feedback.callbacks("retry-reservation"));
+              }
+            }}
+          >
+            BOM更新
           </DropdownMenuItem>
+          {isManual && isOrdered && (
+            <DropdownMenuItem variant="destructive" onClick={() => setCancelOpen(true)}>
+              キャンセル
+            </DropdownMenuItem>
+          )}
+          {isManual && isDispatched && (
+            <DropdownMenuItem
+              variant="destructive"
+              disabled={undoDispatchMutation.isPending}
+              onClick={() => undoDispatchMutation.mutate(undefined, feedback.callbacks("undo-dispatch"))}
+            >
+              発送取消し
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
+      {feedback.errorFor("undo-dispatch") && (
+        <Hint label={feedback.errorFor("undo-dispatch")}>
+          <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+        </Hint>
+      )}
+      {feedback.errorFor("retry-reservation") && (
+        <Hint label={feedback.errorFor("retry-reservation")}>
+          <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+        </Hint>
+      )}
 
-      <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+      {isManual && (
+        <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>注文をキャンセルしますか？</DialogTitle>
+              <DialogDescription>
+                「{order.unique_key}」をキャンセルします。予約済みの部品・中間品は解放されます。
+              </DialogDescription>
+            </DialogHeader>
+            {mutation.error && (
+              <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                {(mutation.error as Error).message}
+              </p>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCancelOpen(false)}>
+                戻る
+              </Button>
+              <Button variant="destructive" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+                キャンセルする
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      <Dialog open={retryConfirmOpen} onOpenChange={setRetryConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>注文をキャンセルしますか？</DialogTitle>
+            <DialogTitle>発送済みの注文のBOMを更新しますか？</DialogTitle>
             <DialogDescription>
-              「{order.unique_key}」をキャンセルします。予約済みの部品・中間品は解放されます。
+              「{order.unique_key}」のレシピの紐付けを、現在登録されているBOMの内容に更新します。
             </DialogDescription>
           </DialogHeader>
-          {mutation.error && (
+          <p className="rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+            在庫の数量は変わりません。必要であれば、更新後に表示される変更内容を見て在庫を調整してください。
+          </p>
+          {retryReservationMutation.error && (
             <p className="rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {(mutation.error as Error).message}
+              {(retryReservationMutation.error as Error).message}
             </p>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelOpen(false)}>
+            <Button variant="outline" onClick={() => setRetryConfirmOpen(false)}>
               戻る
             </Button>
-            <Button variant="destructive" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-              キャンセルする
+            <Button
+              className="bg-amber-600 text-white hover:bg-amber-600/90 dark:bg-amber-500 dark:hover:bg-amber-500/90"
+              disabled={retryReservationMutation.isPending}
+              onClick={() => retryReservationMutation.mutate(undefined, feedback.callbacks("retry-reservation"))}
+            >
+              更新する
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+
+      <ReservationRetryResultDialog open={retryResultOpen} onOpenChange={setRetryResultOpen} result={retryResult} />
+    </div>
   );
 }
 

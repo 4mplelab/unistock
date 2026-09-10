@@ -50,6 +50,16 @@ class IngestionResult:
     errors: list[str] = field(default_factory=list)
 
 
+@dataclass
+class ReservationDiffEntry:
+    """force_retry_reservationで引当数量が変わった部品/中間品1件分(変更前→変更後)。"""
+
+    component_type: str  # "part" | "assembly"
+    component_id: int
+    before: int
+    after: int
+
+
 class OrderIngestionService:
     """注文の取り込み方式(現状:ポーリング、将来:Webhook)から独立した共通処理層。
 
@@ -210,6 +220,128 @@ class OrderIngestionService:
         """
         await self._reserve(order)
         await self._apply_stock_operation(order, result)
+
+    async def force_retry_reservation(
+        self, order: Order, order_item_ids: list[int] | None = None
+    ) -> list[ReservationDiffEntry]:
+        """対象商品(order_item_ids未指定なら注文内の全商品)の引当(reserved)を、
+        reservation_appliedの状態を問わず強制的に再計算する(BOMを修正したのに反映
+        されないケースの救済用。ユーザーが明示的に操作したときだけ呼ばれる)。
+
+        在庫(stock)には一切触れない。既存の引当行のうちまだ未消費(applied=False)の
+        分だけreservedを解放し(発送確定済みで既に実消費(applied=True)済みの分は、
+        _consume時点で既にreservedから減算済みのため、ここでは触れない。二重に減算
+        するとreservedがマイナスに壊れる)、全ての既存行を削除してから最新のBOM設定で
+        引当を作り直す。在庫の調整は行わない(ユーザーが既に手動で在庫を直している
+        場合、システム側でも動かすと二重に調整されてズレるおそれがあるため、在庫は
+        ユーザーが対応する前提)。
+
+        確定済み(発送済み/キャンセル済み)の注文は、新しく作られる引当もreservedに
+        一切加算しない(applied=Trueとして扱う)。確定済み注文は既に実消費/解放が完了
+        しており、新しい引当をreservedに計上したままにすると「発送済みなのに引当中の
+        まま」という実態と乖離した状態になるため。結果、確定済み注文への実行は
+        「引当の記録(どの部品・中間品がどれだけ必要だったか)」だけが更新され、
+        reserved・stockともに変化しない。
+
+        戻り値は変更があった部品/中間品ごとの引当数量の差分(変更前→変更後)。
+        """
+        stmt = select(OrderItem).where(OrderItem.order_id == order.id)
+        if order_item_ids is not None:
+            stmt = stmt.where(OrderItem.id.in_(order_item_ids))
+        order_items = list((await self._session.execute(stmt)).scalars().all())
+        if not order_items:
+            return []
+        target_ids = [oi.id for oi in order_items]
+
+        reservations = list(
+            (
+                await self._session.execute(
+                    select(OrderPartReservation).where(OrderPartReservation.order_item_id.in_(target_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        before: dict[tuple[str, int], int] = {}
+        for r in reservations:
+            key = ("part", r.part_id) if r.part_id is not None else ("assembly", r.assembly_id)
+            before[key] = before.get(key, 0) + r.quantity
+
+        # reservedの解放は、まだreservedに計上されたまま(applied=False)の行のみ対象。
+        # applied=True(発送で実消費済み/キャンセルで解放済み)の行は、_consume/_release
+        # の時点で既にreservedから減算済みのため、ここでもう一度減算するとreservedが
+        # マイナスに壊れる(ck_assemblies_reserved等のCHECK制約違反で実際に発生した)。
+        # stockには一切触れない
+        pending = [r for r in reservations if not r.applied]
+        for r in pending:
+            if r.part_id is not None:
+                part = (
+                    await self._session.execute(select(Part).where(Part.id == r.part_id).with_for_update())
+                ).scalars().one()
+                part.reserved -= r.quantity
+            else:
+                assembly = (
+                    await self._session.execute(
+                        select(Assembly).where(Assembly.id == r.assembly_id).with_for_update()
+                    )
+                ).scalars().one()
+                assembly.reserved -= r.quantity
+        for r in reservations:
+            await self._session.delete(r)
+
+        await self._session.execute(
+            update(OrderItem).where(OrderItem.id.in_(target_ids)).values(reservation_applied=False)
+        )
+        await self._session.commit()
+
+        await self._reserve(order, force=True)
+
+        after_reservations = list(
+            (
+                await self._session.execute(
+                    select(OrderPartReservation).where(OrderPartReservation.order_item_id.in_(target_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        if order.dispatch_status in _FINAL_STATUSES:
+            # 確定済み注文は新しい引当もreservedに計上しない(applied=Trueとして扱う)。
+            # _reserveは常にreservedへ加算してapplied=Falseで作るため、ここで打ち消す
+            for r in after_reservations:
+                if r.part_id is not None:
+                    part = (
+                        await self._session.execute(select(Part).where(Part.id == r.part_id).with_for_update())
+                    ).scalars().one()
+                    part.reserved -= r.quantity
+                else:
+                    assembly = (
+                        await self._session.execute(
+                            select(Assembly).where(Assembly.id == r.assembly_id).with_for_update()
+                        )
+                    ).scalars().one()
+                    assembly.reserved -= r.quantity
+                r.applied = True
+            await self._session.execute(
+                update(OrderItem).where(OrderItem.id.in_(target_ids)).values(reservation_applied=True)
+            )
+            await self._session.commit()
+
+        after: dict[tuple[str, int], int] = {}
+        for r in after_reservations:
+            key = ("part", r.part_id) if r.part_id is not None else ("assembly", r.assembly_id)
+            after[key] = after.get(key, 0) + r.quantity
+
+        all_keys = set(before) | set(after)
+        return [
+            ReservationDiffEntry(
+                component_type=key[0], component_id=key[1], before=before.get(key, 0), after=after.get(key, 0)
+            )
+            for key in sorted(all_keys)
+            if before.get(key, 0) != after.get(key, 0)
+        ]
 
     async def _process_summary(self, summary: OrderSummary, result: IngestionResult) -> None:
         existing = await self._get_order(summary.unique_key)
@@ -548,7 +680,7 @@ class OrderIngestionService:
 
     # --- 在庫操作フック ---
 
-    async def _reserve(self, order: Order) -> None:
+    async def _reserve(self, order: Order, *, force: bool = False) -> None:
         """未引当(reservation_applied=False)のOrderItemだけを対象に部品引当を試みる。
 
         商品単位で冪等かつ何度でも安全に再試行できる(BOM未設定・選択内容に一致するBOM行が
@@ -556,11 +688,12 @@ class OrderIngestionService:
         スキップされた商品はreservation_appliedがFalseのまま残り、次にこの注文が同期処理
         (自動ポーリング・手動同期・専用リトライジョブ)に触れられたときに再試行される。
 
-        対象は「進行中の注文」のみ。発送/キャンセルが確定した時点でBOM未設定等により
+        対象は通常「進行中の注文」のみ。発送/キャンセルが確定した時点でBOM未設定等により
         引当できていない商品は、それ以降は遡って補正しない(過去の確定済み注文は対象外、
-        というユーザー判断による)。
+        というユーザー判断による)。force=Trueの場合のみこのガードを外す
+        (force_retry_reservationからの、確定済み注文へのユーザー明示操作用)。
         """
-        if order.dispatch_status in _FINAL_STATUSES:
+        if order.dispatch_status in _FINAL_STATUSES and not force:
             return
 
         items_result = await self._session.execute(
@@ -624,6 +757,33 @@ class OrderIngestionService:
             selected_keys: set[tuple[str, str]] = {("option", vid) for vid in selected_option_ids}
             if oi.variation_id:
                 selected_keys.add(("variation", oi.variation_id))
+
+            # 選択したオプション/種類のうち、BOMのどの行の条件にも一度も登場しないものが
+            # あれば、そのオプション/種類のBOM行が未整備とみなしてスキップする。共通行
+            # (条件0件、常に適用される)が存在すると、それだけで「一致する行がある」ことに
+            # なってしまい、オプション行が未整備でも見逃されてしまうため
+            # (unistock-assembly-resolved-mismatch-fixと同種のバグ、2026-09-10発見)。
+            referenced_keys = {(c.selector_type, c.selector_id) for line in bom_lines for c in line.conditions}
+            unmatched_keys = selected_keys - referenced_keys
+            if unmatched_keys:
+                unmatched_desc = ", ".join(f"{t}:{i}" for t, i in sorted(unmatched_keys))
+                logger.warning(
+                    "注文 %s の商品 item_id=%s: 選択内容(%s)に対応するBOM行がないため、"
+                    "この商品の部品引当をスキップします(次にこの注文が同期されたときに再試行します)",
+                    order.unique_key,
+                    oi.item_id,
+                    unmatched_desc,
+                )
+                await EventLogService(self._session).log(
+                    category="reservation_skipped",
+                    level="warning",
+                    message=f"注文 {order.unique_key} の商品 item_id={oi.item_id}: 選択内容({unmatched_desc})に"
+                    "対応するBOM行がないため、この商品の部品引当をスキップしました(次回同期時に再試行します)",
+                    order_id=order.id,
+                    item_id=oi.item_id,
+                    shop_id=order.shop_id,
+                )
+                continue
 
             # 各BOM行は0..N個の条件(AND)を持つ。条件が0件の行は常に適用される「共通行」、
             # 条件が1件以上ある行は、その全条件を注文の選択内容が満たしたときだけ適用される

@@ -16,6 +16,9 @@ export interface EventLog {
   item_id: string | null;
   shop_id: number | null;
   created_at: string;
+  // 同一(category, order_id, item_id)が繰り返し発生した回数。集約対象外のカテゴリは常に1
+  occurrence_count: number;
+  last_occurred_at: string;
 }
 
 export interface EventLogListResult {

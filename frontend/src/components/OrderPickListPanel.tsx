@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Printer } from "lucide-react";
-import { fetchOrderSummary, updateOrderItemPicked } from "../api/client";
+import { fetchOrderSummary, retryOrderReservation, updateOrderItemPicked } from "../api/client";
 import { useShopContext } from "@/contexts/ShopContext";
 import BaseOrderLinkButton from "./BaseOrderLinkButton";
+import ReservationRetryResultDialog from "./ReservationRetryResultDialog";
 import type { OrderSummaryRow, PickListEntry } from "../types/order_summary";
+import type { OrderRetryReservationResult } from "../types/order";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import PickEntryLabel from "@/components/PickEntryLabel";
@@ -168,6 +170,23 @@ export default function OrderPickListPanel({ pick }: { pick: PickingPrintState }
       queryClient.invalidateQueries({ queryKey: ["order-summary"] });
       // サイドバーの「ピッキング」通知バッジも、ページ遷移を待たずその場で最新化する
       queryClient.invalidateQueries({ queryKey: ["nav-counts"] });
+    },
+  });
+
+  // BOMを修正したのに引当が反映されない場合の救済用。このページは未対応の注文のみ
+  // 表示するため(未対応=まだ在庫を消費していない)、確認ダイアログ無しで即時実行してよい
+  const retryFeedback = useSaveFeedback();
+  const [retryResultOpen, setRetryResultOpen] = useState(false);
+  const [retryResult, setRetryResult] = useState<OrderRetryReservationResult | null>(null);
+  const retryReservationMutation = useMutation({
+    mutationFn: ({ orderId, itemId }: { orderId: number; itemId: number }) =>
+      retryOrderReservation(orderId, [itemId]),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["order-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
+      queryClient.invalidateQueries({ queryKey: ["nav-counts"] });
+      setRetryResult(result);
+      setRetryResultOpen(true);
     },
   });
 
@@ -379,9 +398,31 @@ export default function OrderPickListPanel({ pick }: { pick: PickingPrintState }
                       必要な部品・中間品
                     </div>
                     {!item.reservation_applied ? (
-                      <p className="text-xs font-medium text-destructive print:text-[7pt] print:font-normal">
-                        ⚠️ BOM未設定など、自動引当できていません(次回同期時に再試行されます)
-                      </p>
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-destructive print:text-[7pt] print:font-normal">
+                          ⚠️ BOM未設定など、自動引当できていません(次回同期時に再試行されます)
+                        </p>
+                        <div className="flex items-center gap-1.5 print:hidden">
+                          <button
+                            type="button"
+                            className="text-xs text-amber-700 underline-offset-2 hover:underline disabled:opacity-50 dark:text-amber-400"
+                            disabled={retryReservationMutation.isPending}
+                            onClick={() =>
+                              retryReservationMutation.mutate(
+                                { orderId: order.id, itemId: item.id },
+                                retryFeedback.callbacks(String(item.id))
+                              )
+                            }
+                          >
+                            今すぐBOMを反映
+                          </button>
+                          {retryFeedback.errorFor(String(item.id)) && (
+                            <Hint label={retryFeedback.errorFor(String(item.id))}>
+                              <span className="size-1.5 shrink-0 rounded-full bg-destructive" />
+                            </Hint>
+                          )}
+                        </div>
+                      </div>
                     ) : item.pick_list.length === 0 ? (
                       <p className="text-xs text-muted-foreground print:text-[7pt]">なし</p>
                     ) : (
@@ -410,6 +451,7 @@ export default function OrderPickListPanel({ pick }: { pick: PickingPrintState }
           </Card>
         );
       })}
+      <ReservationRetryResultDialog open={retryResultOpen} onOpenChange={setRetryResultOpen} result={retryResult} />
     </div>
   );
 }

@@ -34,6 +34,8 @@ async def list_event_logs(
                 item_id=event_log.item_id,
                 shop_id=event_log.shop_id,
                 created_at=event_log.created_at,
+                occurrence_count=event_log.occurrence_count,
+                last_occurred_at=event_log.last_occurred_at,
             )
             for event_log, order_unique_key in rows
         ],

@@ -1,7 +1,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -52,3 +52,8 @@ class EventLog(Base):
     # 関連リンクの制御に使う
     shop_id: Mapped[int | None] = mapped_column(ForeignKey("shops.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 同一(category, order_id, item_id)の再発生は新規行を追加せず、この行を更新して集約する
+    # (reservation_skipped等、解消されるまで自動リトライのたびに同じ内容が繰り返し記録され、
+    # 件数だけが無意味に膨らむのを防ぐ。EventLogService.log参照)
+    occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    last_occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

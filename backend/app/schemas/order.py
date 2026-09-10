@@ -35,6 +35,19 @@ class OrderDispatchStatusUpdate(BaseModel):
     dispatch_status: str
 
 
+class OrderRetryReservationRequest(BaseModel):
+    # 未指定なら注文内の全商品が対象
+    order_item_ids: list[int] | None = None
+
+
+class ReservationDiffEntryRead(BaseModel):
+    component_type: str  # "part" | "assembly"
+    component_id: int
+    component_name: str | None
+    before: int
+    after: int
+
+
 class OrderRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,6 +77,11 @@ class OrderListRead(BaseModel):
     items: list[OrderRead]
     total: int
     page: int
+
+
+class OrderRetryReservationResult(BaseModel):
+    order: OrderRead
+    diffs: list[ReservationDiffEntryRead]
 
 
 class IngestionResultRead(BaseModel):

@@ -54,3 +54,16 @@ export interface IngestionResult {
   transitioned_orders: number;
   errors: string[];
 }
+
+export interface ReservationDiffEntry {
+  component_type: "part" | "assembly";
+  component_id: number;
+  component_name: string | null;
+  before: number;
+  after: number;
+}
+
+export interface OrderRetryReservationResult {
+  order: Order;
+  diffs: ReservationDiffEntry[];
+}
