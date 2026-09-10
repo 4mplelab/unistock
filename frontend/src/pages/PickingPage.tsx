@@ -15,14 +15,14 @@ export default function PickingPage() {
 
   return (
     <div>
-      <div className="mb-8 flex items-center justify-between gap-3">
+      <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">ピッキング</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
             未対応の注文と、その注文が消費する部品・中間品の一覧です
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-3 print:hidden">
+        <div className="flex shrink-0 items-center gap-3 self-start print:hidden">
           <PickingPrintToolbar {...pick} disabled={(data?.orders.length ?? 0) === 0} />
         </div>
       </div>

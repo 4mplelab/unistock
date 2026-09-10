@@ -94,7 +94,7 @@ export default function ManualItemEditPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">商品編集(手動)</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">名前・価格・在庫数・バリエーションをまとめて編集します</p>
@@ -103,6 +103,7 @@ export default function ManualItemEditPage() {
           type="submit"
           form={MANUAL_ITEM_FORM_ID}
           disabled={saveMutation.isPending || isLoading || !item || hasIncompletePrice}
+          className="self-start"
         >
           {saveMutation.isPending ? "更新中..." : "更新"}
         </Button>

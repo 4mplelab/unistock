@@ -56,7 +56,7 @@ export default function AssemblyCreatePage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">新規中間品作成</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
@@ -65,7 +65,12 @@ export default function AssemblyCreatePage() {
               : "新しい中間品を登録します。組成(レシピ)も一緒に登録できます"}
           </p>
         </div>
-        <Button type="submit" form={ASSEMBLY_FORM_ID} disabled={mutation.isPending || isDuplicateSourceLoading}>
+        <Button
+          type="submit"
+          form={ASSEMBLY_FORM_ID}
+          disabled={mutation.isPending || isDuplicateSourceLoading}
+          className="self-start"
+        >
           {mutation.isPending ? "作成中..." : "作成"}
         </Button>
       </div>

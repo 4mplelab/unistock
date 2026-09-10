@@ -85,12 +85,17 @@ export default function ScheduleEditPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">リストック予約編集</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">待機中(実行前)のスケジュールのみ編集できます</p>
         </div>
-        <Button type="submit" form={FORM_ID} disabled={mutation.isPending || isLoading || !schedule}>
+        <Button
+          type="submit"
+          form={FORM_ID}
+          disabled={mutation.isPending || isLoading || !schedule}
+          className="self-start"
+        >
           {mutation.isPending ? "更新中..." : "更新"}
         </Button>
       </div>

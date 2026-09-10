@@ -176,14 +176,14 @@ export default function SalesPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">売上</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
             発送確定した注文をもとにした売上の集計です(キャンセルされた商品は除きます)
           </p>
         </div>
-        <div className="flex items-end gap-4">
+        <div className="flex flex-wrap items-end gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="sales-shop">ショップ</Label>
             <select

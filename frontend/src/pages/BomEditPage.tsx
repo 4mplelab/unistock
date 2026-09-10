@@ -901,7 +901,7 @@ export default function BomEditPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">{routeItemId ? "BOM編集" : "BOM新規作成"}</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
@@ -911,6 +911,7 @@ export default function BomEditPage() {
         <Button
           onClick={() => saveMutation.mutate()}
           disabled={!selectedItem || saveMutation.isPending || lines.length === 0}
+          className="self-start"
         >
           {saveMutation.isPending ? "保存中..." : "保存"}
         </Button>

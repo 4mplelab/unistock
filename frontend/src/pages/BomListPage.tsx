@@ -551,14 +551,14 @@ export default function BomListPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">BOM(商品レシピ)</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
             {currentShop ? `${currentShop.name}の商品が消費する部品と数量を管理します` : "商品が消費する部品と数量を管理します"}
           </p>
         </div>
-        <div className="flex items-center gap-2 print:hidden">
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
           <input
             ref={fileInputRef}
             type="file"

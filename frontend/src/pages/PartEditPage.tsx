@@ -40,12 +40,17 @@ export default function PartEditPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">部品編集</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">名前・SKU・在庫数などを編集します</p>
         </div>
-        <Button type="submit" form={PART_FORM_ID} disabled={mutation.isPending || isLoading || !part}>
+        <Button
+          type="submit"
+          form={PART_FORM_ID}
+          disabled={mutation.isPending || isLoading || !part}
+          className="self-start"
+        >
           {mutation.isPending ? "更新中..." : "更新"}
         </Button>
       </div>

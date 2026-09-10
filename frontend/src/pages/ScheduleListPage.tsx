@@ -63,14 +63,14 @@ export default function ScheduleListPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">リストック予約</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
             登録済みのリストック予約と実行結果
           </p>
         </div>
-        <Link to="/schedules/new" className={buttonVariants({ variant: "default" })}>
+        <Link to="/schedules/new" className={`${buttonVariants({ variant: "default" })} shrink-0 self-start`}>
           新規作成
         </Link>
       </div>

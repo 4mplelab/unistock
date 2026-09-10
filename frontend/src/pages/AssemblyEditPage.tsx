@@ -205,7 +205,7 @@ export default function AssemblyEditPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">中間品編集</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
@@ -216,6 +216,7 @@ export default function AssemblyEditPage() {
           type="submit"
           form={ASSEMBLY_FORM_ID}
           disabled={saveMutation.isPending || isLoading || !assembly}
+          className="self-start"
         >
           {saveMutation.isPending ? "更新中..." : "更新"}
         </Button>

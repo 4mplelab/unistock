@@ -445,7 +445,8 @@ function DemoModeBadge() {
   return (
     <Hint label="デモモード: ショップ接続なし・ログイン不要で動作中です">
       <Badge className="border-transparent bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
-        デモモード
+        <span className="sm:hidden">デモ</span>
+        <span className="hidden sm:inline">デモモード</span>
       </Badge>
     </Hint>
   );
@@ -529,14 +530,14 @@ function ShopSwitcher({ isAdmin }: { isAdmin: boolean }) {
     <>
       <DropdownMenu>
         <Hint label="操作対象のショップを切り替える">
-          <DropdownMenuTrigger className={cn(topBarIconButtonClass, "w-auto gap-1.5 px-2")}>
+          <DropdownMenuTrigger className={cn(topBarIconButtonClass, "relative w-auto gap-1.5 px-2")}>
             <Store className="size-4 shrink-0" />
-            <span className="max-w-20 truncate text-xs font-medium sm:max-w-32">
+            <span className="hidden max-w-32 truncate text-xs font-medium sm:inline">
               {currentShop?.name ?? "ショップ未選択"}
             </span>
             <span
               className={cn(
-                "size-2 shrink-0 rounded-full",
+                "absolute -top-0.5 -right-0.5 size-2 rounded-full ring-2 ring-card",
                 currentConnected == null
                   ? "bg-muted-foreground/40"
                   : currentConnected
@@ -746,7 +747,7 @@ export default function AppShell() {
             <LogoMark className="size-12 shrink-0" />
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="truncate text-3xl font-bold tracking-tight">UniStock</div>
+                <div className="text-3xl font-bold tracking-tight">UniStock</div>
                 <DemoModeBadge />
               </div>
               <div className="truncate text-[11px] text-muted-foreground">在庫・発注・注文の統合管理</div>

@@ -43,6 +43,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import Hint from "@/components/Hint";
+import ComponentLabel from "@/components/ComponentLabel";
 import {
   Dialog,
   DialogContent,
@@ -258,10 +259,26 @@ export default function DashboardPage() {
   const negativeStockItems = useMemo(() => {
     const parts = (partsQuery.data ?? [])
       .filter((p) => p.available < 0)
-      .map((p) => ({ kind: "part" as const, id: p.id, name: p.name, available: p.available }));
+      .map((p) => ({
+        kind: "part" as const,
+        id: p.id,
+        name: p.name,
+        available: p.available,
+        group: p.group,
+        colors: p.colors,
+        tags: p.tags,
+      }));
     const assemblies = (assembliesQuery.data ?? [])
       .filter((a) => a.available < 0)
-      .map((a) => ({ kind: "assembly" as const, id: a.id, name: a.name, available: a.available }));
+      .map((a) => ({
+        kind: "assembly" as const,
+        id: a.id,
+        name: a.name,
+        available: a.available,
+        group: a.group,
+        colors: null,
+        tags: a.tags,
+      }));
     return [...parts, ...assemblies].sort((a, b) => a.available - b.available);
   }, [partsQuery.data, assembliesQuery.data]);
 
@@ -361,20 +378,23 @@ export default function DashboardPage() {
                             target="_blank"
                             rel="noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 truncate text-primary underline-offset-2 hover:underline"
+                            className="group inline-flex min-w-0 items-center gap-1 text-primary"
                           >
-                            {item.name}
+                            <ComponentLabel name={item.name} group={item.group} colors={item.colors} tags={item.tags} />
                             <ExternalLink className="size-3 shrink-0 text-muted-foreground-subtle" />
                           </a>
                         </Hint>
                       ) : (
-                        <span className="truncate font-medium">{item.name}</span>
+                        <ComponentLabel name={item.name} group={item.group} colors={item.colors} tags={item.tags} />
                       )}
-                      <span className="ml-2 whitespace-nowrap text-muted-foreground-subtle">
+                    </div>
+                    <div
+                      className="flex shrink-0 flex-col items-end gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="whitespace-nowrap text-xs text-muted-foreground-subtle">
                         在庫 {formatNumber(item.stock)} / 発注点 {formatNumber(item.reorder_threshold)}
                       </span>
-                    </div>
-                    <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
                       {item.has_open_order ? (
                         <Badge className="border-transparent bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
                           発注中
@@ -531,10 +551,10 @@ export default function DashboardPage() {
                     className="flex cursor-pointer items-center justify-between gap-3 px-6 py-4 text-sm hover:bg-muted/50"
                     onClick={() => navigate(item.kind === "part" ? `/parts/${item.id}/edit` : `/assemblies/${item.id}/edit`)}
                   >
-                    <span className="min-w-0 truncate font-medium">
-                      {item.name}
+                    <span className="flex min-w-0 items-baseline gap-1.5">
+                      <ComponentLabel name={item.name} group={item.group} colors={item.colors} tags={item.tags} />
                       {item.kind === "assembly" && (
-                        <span className="ml-1.5 text-xs font-normal text-muted-foreground-subtle">(中間品)</span>
+                        <span className="shrink-0 text-xs font-normal text-muted-foreground-subtle">(中間品)</span>
                       )}
                     </span>
                     <span className="shrink-0 font-semibold tabular-nums text-destructive">{formatNumber(item.available)}</span>

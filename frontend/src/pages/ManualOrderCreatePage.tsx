@@ -197,7 +197,7 @@ export default function ManualOrderCreatePage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <Button variant="ghost" size="sm" onClick={() => navigate("/orders")} className="mb-2 -ml-2">
             <ArrowLeft />
@@ -214,6 +214,7 @@ export default function ManualOrderCreatePage() {
             if (hasValidLine && !hasIncompleteVariation) mutation.mutate();
           }}
           disabled={mutation.isPending}
+          className="self-start"
         >
           {mutation.isPending ? (isEdit ? "更新中..." : "登録中...") : isEdit ? "注文を更新" : "注文を登録"}
         </Button>

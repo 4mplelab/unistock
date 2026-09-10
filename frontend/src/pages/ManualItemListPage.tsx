@@ -107,14 +107,14 @@ export default function ManualItemListPage() {
 
   return (
     <div>
-      <div className="mb-10 flex items-center justify-between">
+      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">商品管理(手動)</h1>
           <p className="mt-1 text-sm text-muted-foreground-subtle">
             「{currentShop.name}」の商品を手動で登録・管理します
           </p>
         </div>
-        <Link to="/manual-items/new" className={buttonVariants({ variant: "default" })}>
+        <Link to="/manual-items/new" className={`${buttonVariants({ variant: "default" })} shrink-0`}>
           新規作成
         </Link>
       </div>

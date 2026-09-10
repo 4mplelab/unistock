@@ -40,6 +40,9 @@ export interface ReorderNeeded {
   reorder_threshold: number;
   purchase_url: string | null;
   has_open_order: boolean;
+  group: string | null;
+  colors: string[] | null;
+  tags: string[] | null;
 }
 
 export interface LeadTimeSummary {

@@ -72,6 +72,9 @@ async def reorder_needed(session: AsyncSession = Depends(get_db)) -> list[Reorde
             reorder_threshold=part.reorder_threshold,
             purchase_url=part.purchase_url,
             has_open_order=has_open_order,
+            group=part.group,
+            colors=part.colors,
+            tags=part.tags,
         )
         for part, has_open_order in rows
     ]

@@ -61,3 +61,6 @@ class ReorderNeededRead(BaseModel):
     reorder_threshold: int
     purchase_url: str | None
     has_open_order: bool
+    group: str | None
+    colors: list[str] | None
+    tags: list[str] | None
