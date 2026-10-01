@@ -699,6 +699,7 @@ export default function AppShell() {
     enabled: !!currentUser,
     refetchInterval: 20 * 60 * 1000,
   });
+  const { data: health } = useQuery({ queryKey: ["health"], queryFn: fetchHealth, staleTime: 60_000 });
   // タブレット未満では折りたたみ(アイコンのみ)表示を無視し、常にラベル込みで出す
   const effectiveCollapsed = isDesktop && collapsed;
 
@@ -809,6 +810,9 @@ export default function AppShell() {
           </nav>
           <div className="mt-3 flex shrink-0 flex-col gap-1 border-t border-muted-foreground/15 pt-3">
             <NavItemLink {...SETTINGS_ITEM} collapsed={effectiveCollapsed} />
+            {health?.version && !effectiveCollapsed && (
+              <div className="px-3 pt-1 text-[11px] text-muted-foreground/70 tabular-nums">UniStock {health.version}</div>
+            )}
           </div>
         </aside>
         <main className="flex-1 overflow-y-auto overflow-x-auto px-6 py-8 lg:px-14 lg:py-12 print:block print:h-auto print:overflow-visible print:p-0">
