@@ -7,7 +7,8 @@ export type StockMovementReason =
   | "order_dispatch_undone"
   | "assembly_build"
   | "assembly_build_material"
-  | "manual_item_consumed";
+  | "manual_item_consumed"
+  | "direct_consumed";
 
 export type StockMovementComponentType = "part" | "assembly";
 

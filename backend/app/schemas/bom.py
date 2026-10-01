@@ -103,3 +103,41 @@ class ItemBuildableCountRead(BaseModel):
     item_id: str
     item_name: str | None
     buildable: int | None
+
+
+class BomSelectionInput(BaseModel):
+    """直接消費時に選んだオプション選択肢/種類(BomItemConditionのselector_type/selector_idに対応)。"""
+
+    selector_type: Literal["option", "variation"]
+    selector_id: str = Field(min_length=1, max_length=64)
+
+
+class BomConsumeRequest(BaseModel):
+    """注文を介さずに商品(BOM)単位で部品・中間品の在庫を減らす(自家消費・手渡し等)。
+
+    dry_run=trueなら在庫を変えずに、消費対象の行と作成可能数だけを返す
+    (MCP等で、作成可能数を超える消費の前に確認を挟むため)。
+    """
+
+    quantity: int = Field(gt=0)
+    selections: list[BomSelectionInput] = Field(default_factory=list)
+    note: str | None = None
+    dry_run: bool = False
+
+
+class BomConsumeLineRead(BaseModel):
+    component_type: Literal["part", "assembly"]
+    component_id: int
+    component_name: str
+    quantity: int
+    buildable: int
+
+
+class BomConsumeResult(BaseModel):
+    item_id: str
+    item_name: str | None
+    quantity: int
+    # 選んだ組み合わせでの作成可能数(BOM一覧の作成可能数と同じ算出方法)
+    buildable: int
+    lines: list[BomConsumeLineRead]
+    consumed: bool

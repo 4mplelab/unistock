@@ -18,6 +18,7 @@ export const REASON_LABEL: Record<StockMovementReason, string> = {
   assembly_build: "組立",
   assembly_build_material: "組立材料消費",
   manual_item_consumed: "手動商品の消費",
+  direct_consumed: "直接消費",
 };
 
 interface Props {

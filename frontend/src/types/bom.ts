@@ -54,3 +54,25 @@ export interface BomProductSetting {
   matrix_layout: boolean;
   buildable_alert_threshold: number | null;
 }
+
+export interface BomConsumeInput {
+  quantity: number;
+  selections: { selector_type: "option" | "variation"; selector_id: string }[];
+  note?: string | null;
+  dry_run?: boolean;
+}
+
+export interface BomConsumeResult {
+  item_id: string;
+  item_name: string | null;
+  quantity: number;
+  buildable: number;
+  lines: {
+    component_type: "part" | "assembly";
+    component_id: number;
+    component_name: string;
+    quantity: number;
+    buildable: number;
+  }[];
+  consumed: boolean;
+}

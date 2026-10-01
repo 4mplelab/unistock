@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, ExternalLink, MoreVertical } from "lucide-react";
+import { ChevronDown, ChevronRight, ExternalLink, MoreVertical, PackageMinus } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,7 @@ import NoPartsNeededMark from "@/components/NoPartsNeededMark";
 import ComponentLabel from "@/components/ComponentLabel";
 import Hint from "@/components/Hint";
 import FieldError from "@/components/FieldError";
+import BomConsumeDialog, { type BomConsumeTarget } from "@/components/BomConsumeDialog";
 import { useShopContext } from "@/contexts/ShopContext";
 import { useBaseItemAdminUrl, useBaseItemShopUrl } from "@/lib/baseItemUrl";
 import { hasPlatformSibling } from "@/lib/platforms";
@@ -443,6 +444,7 @@ export default function BomListPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [itemToDelete, setItemToDelete] = useState<{ item_id: string; item_name: string | null } | null>(null);
+  const [itemToConsume, setItemToConsume] = useState<BomConsumeTarget | null>(null);
   const deleteMutation = useMutation({
     mutationFn: (item: { item_id: string; item_name: string | null }) =>
       replaceBomForItem(shopId!, item.item_id, { item_name: item.item_name, lines: [] }),
@@ -673,7 +675,7 @@ export default function BomListPage() {
                   <TableHead className="w-[42%]">商品</TableHead>
                   <TableHead>部品/中間品</TableHead>
                   <TableHead className="w-28 text-right">作成可能数</TableHead>
-                  <TableHead className="sticky right-0 w-10 bg-muted px-2 last:pr-2" />
+                  <TableHead className="sticky right-0 w-19 bg-muted px-2 last:pr-2" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -729,29 +731,49 @@ export default function BomListPage() {
                           className="sticky right-0 bg-card px-2 align-top last:pr-2"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
-                              aria-label="その他の操作"
-                            >
-                              <MoreVertical />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  navigate(`/bom/${shopId}/new?duplicate_item_id=${encodeURIComponent(g.item_id)}`)
-                                }
+                          <div className="flex items-center gap-1">
+                            <Hint label="在庫を消費する">
+                              <span className="inline-flex">
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  aria-label="在庫を消費する"
+                                  onClick={() =>
+                                    setItemToConsume({
+                                      item_id: g.item_id,
+                                      item_name: g.item_name,
+                                      conditions: g.lines.flatMap((l) => l.conditions),
+                                    })
+                                  }
+                                >
+                                  <PackageMinus />
+                                </Button>
+                              </span>
+                            </Hint>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger
+                                className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+                                aria-label="その他の操作"
                               >
-                                複製して新規作成
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                variant="destructive"
-                                onClick={() => setItemToDelete({ item_id: g.item_id, item_name: g.item_name })}
-                              >
-                                削除
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                                <MoreVertical />
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    navigate(`/bom/${shopId}/new?duplicate_item_id=${encodeURIComponent(g.item_id)}`)
+                                  }
+                                >
+                                  複製して新規作成
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => setItemToDelete({ item_id: g.item_id, item_name: g.item_name })}
+                                >
+                                  削除
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableCell>
                       </TableRow>
 
@@ -839,6 +861,10 @@ export default function BomListPage() {
           </div>
         </CardContent>
       </Card>
+
+      {shopId != null && (
+        <BomConsumeDialog shopId={shopId} target={itemToConsume} onClose={() => setItemToConsume(null)} />
+      )}
 
       <Dialog open={itemToDelete !== null} onOpenChange={(open) => !open && setItemToDelete(null)}>
         <DialogContent>

@@ -43,6 +43,8 @@ import type {
   BomListResult,
   BomProductSetting,
   BomReplaceInput,
+  BomConsumeInput,
+  BomConsumeResult,
 } from "../types/bom";
 import type { IngestionResult, Order, OrderListResult, OrderRetryReservationResult } from "../types/order";
 import type { OrderSummary } from "../types/order_summary";
@@ -491,6 +493,13 @@ export function fetchBomProducts(
 export function replaceBomForItem(shopId: number, itemId: string, input: BomReplaceInput): Promise<BomItem[]> {
   return request<BomItem[]>(`/shops/${shopId}/bom/by-item/${encodeURIComponent(itemId)}`, {
     method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export function consumeBomItem(shopId: number, itemId: string, input: BomConsumeInput): Promise<BomConsumeResult> {
+  return request<BomConsumeResult>(`/shops/${shopId}/bom/by-item/${encodeURIComponent(itemId)}/consume`, {
+    method: "POST",
     body: JSON.stringify(input),
   });
 }

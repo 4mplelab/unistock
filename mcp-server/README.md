@@ -153,6 +153,7 @@ BASEには一切書き込まず、UniStock内部で完結する操作のみ含�
 | `create_part` / `add_part_stock` | 部品の新規登録・在庫加算 |
 | `create_assembly` / `replace_assembly_recipe` / `build_assembly` | 中間品の新規登録・レシピ置換・組み立て |
 | `create_bom_item` / `update_bom_item` | 商品のBOM行の追加・数量更新 |
+| `consume_bom_product` | 注文を作らずに、商品(BOM)単位で部品・中間品の在庫を直接消費する(BASEの在庫は変えない)。消費数が作成可能数を超える場合、`confirm=true`を明示しない限り実行されず、確認を促すメッセージを返す |
 | `create_restock_schedule` | リストック予約の作成。実行予定時刻が12時間以内の場合、`confirm=true`を明示しない限り作成されず、確認を促すメッセージを返す |
 | `cancel_restock_schedule` | 未実行のリストック予約のキャンセル |
 

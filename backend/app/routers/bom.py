@@ -6,6 +6,8 @@ from app.database import get_db
 from app.models.bom import BomItem
 from app.schemas.bom import (
     BomConditionRead,
+    BomConsumeRequest,
+    BomConsumeResult,
     BomImportResult,
     BomItemCreate,
     BomItemRead,
@@ -17,7 +19,13 @@ from app.schemas.bom import (
 )
 from app.services.assembly_service import AssemblyNotFoundError, AssemblyService
 from app.services.auth_service import require_auth
-from app.services.bom_service import NONE_COMPONENT_LABEL, BomItemNotFoundError, BomService, DuplicateBomItemError
+from app.services.bom_service import (
+    NONE_COMPONENT_LABEL,
+    BomItemNotFoundError,
+    BomService,
+    DuplicateBomItemError,
+    NothingToConsumeError,
+)
 from app.services.part_service import PartNotFoundError, PartService
 
 router = APIRouter(prefix="/api/shops/{shop_id}/bom", tags=["bom"], dependencies=[Depends(require_auth)])
@@ -186,6 +194,19 @@ async def replace_bom_for_item(
         )
         for bi in bom_items
     ]
+
+
+@router.post("/by-item/{item_id}/consume", response_model=BomConsumeResult)
+async def consume_bom_item(
+    shop_id: int, item_id: str, body: BomConsumeRequest, session: AsyncSession = Depends(get_db)
+) -> BomConsumeResult:
+    service = BomService(session)
+    try:
+        return await service.consume_item(shop_id, item_id, body)
+    except BomItemNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except NothingToConsumeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.patch("/{bom_item_id}", response_model=BomItemRead)

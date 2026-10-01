@@ -26,6 +26,7 @@ BASE連携ショップの注文には使えない(バックエンド側の制約
 import os
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from mcp.server.mcpserver import MCPServer
@@ -349,6 +350,43 @@ async def create_bom_item(
 async def update_bom_item(shop_id: int, bom_item_id: int, quantity: int) -> Any:
     """BOM行の数量を更新する。"""
     return await _write("PATCH", f"/shops/{shop_id}/bom/{bom_item_id}", {"quantity": quantity})
+
+
+@mcp.tool()
+async def consume_bom_product(
+    shop_id: int,
+    item_id: str,
+    quantity: int,
+    selections: list[dict[str, str]] | None = None,
+    note: str | None = None,
+    confirm: bool = False,
+) -> Any:
+    """注文を作らずに、商品(BOM)単位で部品・中間品の在庫を直接減らす(自家消費・手渡し等)。
+    BASE等の外部ECの在庫には触れない。共通行に加え、selectionsで選んだ選択肢の条件を
+    満たすBOM行が対象。selectionsは[{"selector_type": "option"|"variation",
+    "selector_id": ...}, ...]で、値はlist_bom_productsのconditionsにあるものを使う
+    (種類(variation)を持つ商品は必ず1つ選ぶこと)。
+
+    消費数が作成可能数(選んだ組み合わせでの、BOM一覧と同じ算出方法)を超える場合は
+    在庫がマイナスになるため、確認を返す。その内容をユーザーに提示し、明示的な同意を
+    得てからconfirm=trueで再度呼び出すこと。"""
+    body = {"quantity": quantity, "selections": selections or [], "note": note}
+    path = f"/shops/{shop_id}/bom/by-item/{quote(item_id, safe='')}/consume"
+    if not confirm:
+        preview = await _write("POST", path, {**body, "dry_run": True})
+        if "error" in preview:
+            return preview
+        if preview["buildable"] < quantity:
+            return {
+                "requires_confirmation": True,
+                "message": (
+                    f"消費数({quantity})が作成可能数({preview['buildable']})を超えています。"
+                    "実行すると一部の部品・中間品の在庫がマイナスになります。"
+                    "内容をユーザーに提示し、明示的な同意を得てからconfirm=trueで再度呼び出してください。"
+                ),
+                "preview": preview,
+            }
+    return await _write("POST", path, body)
 
 
 _RESTOCK_CONFIRM_THRESHOLD_HOURS = 12

@@ -17,6 +17,7 @@ class StockMovementReason(str, enum.Enum):
     ASSEMBLY_BUILD = "assembly_build"
     ASSEMBLY_BUILD_MATERIAL = "assembly_build_material"
     MANUAL_ITEM_CONSUMED = "manual_item_consumed"
+    DIRECT_CONSUMED = "direct_consumed"
 
 
 class StockMovement(Base):
@@ -38,7 +39,7 @@ class StockMovement(Base):
         CheckConstraint(
             "reason IN ('manual_edit', 'add_stock', 'purchase_order_received', "
             "'purchase_order_receive_undone', 'order_consumed', 'order_dispatch_undone', "
-            "'assembly_build', 'assembly_build_material', 'manual_item_consumed')",
+            "'assembly_build', 'assembly_build_material', 'manual_item_consumed', 'direct_consumed')",
             name="ck_stock_movements_reason",
         ),
         Index("ix_stock_movements_part", "part_id"),

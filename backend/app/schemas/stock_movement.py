@@ -13,6 +13,7 @@ StockMovementReasonLiteral = Literal[
     "assembly_build",
     "assembly_build_material",
     "manual_item_consumed",
+    "direct_consumed",
 ]
 
 ComponentTypeLiteral = Literal["part", "assembly"]

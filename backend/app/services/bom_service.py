@@ -13,10 +13,14 @@ from app.schemas.bom import (
     BomImportResult,
     BomItemCreate,
     BomItemUpdate,
+    BomConsumeLineRead,
+    BomConsumeRequest,
+    BomConsumeResult,
     BomReplaceLine,
     ItemBuildableCountRead,
 )
 from app.services.assembly_service import AssemblyService
+from app.services.stock_movement_service import record_assembly_movement, record_part_movement
 
 
 class BomItemNotFoundError(Exception):
@@ -24,6 +28,10 @@ class BomItemNotFoundError(Exception):
 
 
 class DuplicateBomItemError(Exception):
+    pass
+
+
+class NothingToConsumeError(Exception):
     pass
 
 
@@ -171,6 +179,88 @@ class BomService:
             select(BomItem).where(BomItem.shop_id == shop_id, BomItem.item_id == item_id)
         )
         return list(result.scalars().unique().all())
+
+    async def consume_item(self, shop_id: int, item_id: str, data: BomConsumeRequest) -> BomConsumeResult:
+        """注文を介さずに、商品(item_id)のBOMに従って部品・中間品の在庫を直接減らす。
+
+        選んだ選択肢(selections)で条件を全て満たす行(共通行を含む)が対象。注文の発送確定と
+        同様に在庫のマイナスは許容し、作成可能数を超えてもブロックしない(確認は呼び出し側の
+        責務。dry_run=trueで事前に作成可能数を得られる)。ECサイト側の在庫には触れない。
+        """
+        bom_lines = await self.get_bom_for_item(shop_id, item_id)
+        if not bom_lines:
+            raise BomItemNotFoundError(f"商品(item_id={item_id})のBOMが見つかりません")
+
+        selected = {(s.selector_type, s.selector_id) for s in data.selections}
+        # 同じ部品/中間品が共通行とオプション行の両方に出てくる場合もあるため、1個あたりの数量を合算する
+        per_unit: dict[tuple[str, int], int] = {}
+        for line in bom_lines:
+            if line.component_type == "none":
+                continue
+            if not all((c.selector_type, c.selector_id) in selected for c in line.conditions):
+                continue
+            key = _component_key(line)
+            per_unit[key] = per_unit.get(key, 0) + line.quantity
+        if not per_unit:
+            raise NothingToConsumeError("選んだ内容では消費する部品・中間品がありません")
+
+        names = await self._component_names([line for line in bom_lines if line.component_type != "none"])
+        assembly_buildable = await AssemblyService(self._session).compute_buildable_available()
+
+        locked_parts: dict[int, Part] = {}
+        locked_assemblies: dict[int, Assembly] = {}
+        lines: list[BomConsumeLineRead] = []
+        for (component_type, component_id), unit_quantity in per_unit.items():
+            if component_type == "part":
+                part = (
+                    await self._session.execute(select(Part).where(Part.id == component_id).with_for_update())
+                ).scalars().one()
+                locked_parts[component_id] = part
+                available = part.stock - part.reserved
+            else:
+                assembly = (
+                    await self._session.execute(select(Assembly).where(Assembly.id == component_id).with_for_update())
+                ).scalars().one()
+                locked_assemblies[component_id] = assembly
+                available = assembly_buildable.get(component_id, assembly.stock - assembly.reserved)
+            lines.append(
+                BomConsumeLineRead(
+                    component_type=component_type,
+                    component_id=component_id,
+                    component_name=names.get((component_type, component_id), "-"),
+                    quantity=unit_quantity * data.quantity,
+                    buildable=max(0, available // unit_quantity),
+                )
+            )
+
+        item_name = next((line.item_name for line in bom_lines if line.item_name), None)
+        result = BomConsumeResult(
+            item_id=item_id,
+            item_name=item_name,
+            quantity=data.quantity,
+            buildable=min(line.buildable for line in lines),
+            lines=lines,
+            consumed=False,
+        )
+        if data.dry_run:
+            await self._session.rollback()
+            return result
+
+        note = data.note or None
+        for line in lines:
+            if line.component_type == "part":
+                locked_parts[line.component_id].stock -= line.quantity
+                await record_part_movement(
+                    self._session, line.component_id, -line.quantity, reason="direct_consumed", note=note, shop_id=shop_id
+                )
+            else:
+                locked_assemblies[line.component_id].stock -= line.quantity
+                await record_assembly_movement(
+                    self._session, line.component_id, -line.quantity, reason="direct_consumed", note=note, shop_id=shop_id
+                )
+        await self._session.commit()
+        result.consumed = True
+        return result
 
     async def _find_duplicate(
         self, shop_id: int, item_id: str, component_type: str, part_id: int | None, assembly_id: int | None,
