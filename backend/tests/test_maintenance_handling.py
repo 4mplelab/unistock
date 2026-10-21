@@ -33,6 +33,16 @@ def test_parses_maintenance_response():
     assert "2026-10-22 06:57" in str(err)
 
 
+def test_treats_html_503_as_maintenance():
+    html = "<html><head><title>503 Service Temporarily Unavailable</title></head></html>"
+    err = maintenance_error_from_response(httpx.Response(503, text=html))
+
+    assert err is not None
+    assert err.end is None
+    assert "HTTP 503" in str(err)
+    assert "<html>" not in str(err)
+
+
 def test_ignores_other_errors():
     assert maintenance_error_from_response(httpx.Response(400, json={"error": "invalid_grant"})) is None
     assert maintenance_error_from_response(httpx.Response(500, text="Internal Server Error")) is None
@@ -82,6 +92,16 @@ async def test_refresh_during_maintenance_raises_maintenance_error_and_keeps_tok
         await TokenService(session, shop_id=1).get_valid_access_token()
 
     # 再認証扱いにせず、保存済みトークンは書き換えない
+    assert not session.committed
+
+
+async def test_refresh_html_503_raises_maintenance_error_and_keeps_token(monkeypatch):
+    _patch_token_client(monkeypatch, httpx.Response(503, text="<html>503 Service Temporarily Unavailable</html>"))
+    session = FakeSession(_near_expiry_token())
+
+    with pytest.raises(MaintenanceError):
+        await TokenService(session, shop_id=1).get_valid_access_token()
+
     assert not session.committed
 
 

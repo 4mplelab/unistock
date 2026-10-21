@@ -18,25 +18,34 @@ class TokenRefreshError(Exception):
     """再認証が必要な場合に送出する"""
 
 
-class MaintenanceError(Exception):
-    """BASEがメンテナンス中。再認証は不要で、終了後に再試行すれば回復する"""
+# メンテナンス中にBASEの手前のサーバーが返す(本文はJSONでなくHTML)。終了予定は分からない
+_TEMPORARILY_UNAVAILABLE_STATUSES = {502, 503, 504}
 
-    def __init__(self, end: datetime | None):
+
+class MaintenanceError(Exception):
+    """BASEがメンテナンス中、または一時的に利用できない。再認証は不要で、終了後に再試行すれば回復する"""
+
+    def __init__(self, end: datetime | None, status_code: int | None = None):
         self.end = end
+        if status_code is not None:
+            super().__init__(f"BASEがメンテナンス中、または一時的に利用できません(HTTP {status_code})")
+            return
         end_text = end.astimezone(_JST).strftime("%Y-%m-%d %H:%M") if end else "不明"
         super().__init__(f"BASEがメンテナンス中です(終了予定: {end_text})")
 
 
 def maintenance_error_from_response(resp: httpx.Response) -> MaintenanceError | None:
-    """BASEのメンテナンス応答({"error": "maintenance", "maintenance": {"start", "end"}})なら
-    MaintenanceErrorを返す。それ以外はNone。"""
+    """BASEのメンテナンス応答({"error": "maintenance", "maintenance": {"start", "end"}})、
+    または502/503/504ならMaintenanceErrorを返す。それ以外はNone。"""
     if resp.status_code == 200:
         return None
     try:
         body = resp.json()
     except ValueError:
-        return None
+        body = None
     if not isinstance(body, dict) or body.get("error") != "maintenance":
+        if resp.status_code in _TEMPORARILY_UNAVAILABLE_STATUSES:
+            return MaintenanceError(None, resp.status_code)
         return None
     maintenance = body.get("maintenance")
     raw_end = maintenance.get("end") if isinstance(maintenance, dict) else None
