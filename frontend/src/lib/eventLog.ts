@@ -20,4 +20,5 @@ export const EVENT_LOG_CATEGORY_LABEL: Record<EventLogCategory, string> = {
   stock_operation_failed: "在庫操作失敗",
   retention_cleanup: "自動データ削除",
   auth_error: "認証エラー",
+  ec_maintenance: "連携先メンテナンス",
 };

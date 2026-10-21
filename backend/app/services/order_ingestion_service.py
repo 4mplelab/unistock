@@ -11,7 +11,7 @@ from app.models.bom import BomItem
 from app.models.order import DispatchStatus, Order, OrderItem, OrderItemOption
 from app.models.order_reservation import OrderPartReservation
 from app.models.part import Part
-from app.providers.base import ECAuthError, ECPlatform, IECProvider, OrderDetail, OrderSummary
+from app.providers.base import ECAuthError, ECMaintenanceError, ECPlatform, IECProvider, OrderDetail, OrderSummary
 from app.services.address_utils import truncate_address_to_city
 from app.services.bom_service import BomService
 from app.services.event_log_service import EventLogService
@@ -85,6 +85,12 @@ class OrderIngestionService:
         result = IngestionResult()
         try:
             summaries = await self._provider.list_orders(start_ordered=start_ordered)
+        except ECMaintenanceError as e:
+            # 連携先のメンテナンス中は一時的なもので、終了後の次回同期で取り込まれる。
+            # 認証エラーとは扱いを分け、イベントログ・通知は出さない
+            logger.warning("連携先がメンテナンス中のため注文同期をスキップしました: %s", e)
+            result.errors.append(str(e))
+            return result
         except ECAuthError as e:
             logger.exception("注文一覧の取得に失敗しました(認証エラー)")
             result.errors.append(str(e))
@@ -105,6 +111,13 @@ class OrderIngestionService:
         for summary in summaries:
             try:
                 await self._process_summary(summary, result)
+            except ECMaintenanceError as e:
+                # 途中でメンテナンスに入った場合、残りの注文も同じ結果になるため打ち切る
+                # (未処理分は次回同期で取り込まれる)
+                logger.warning("連携先がメンテナンス中のため注文同期を中断しました: %s", e)
+                result.errors.append(str(e))
+                await self._session.rollback()
+                break
             except Exception as e:  # noqa: BLE001
                 logger.exception("注文 %s の取り込みに失敗しました", summary.unique_key)
                 result.errors.append(f"{summary.unique_key}: {e}")

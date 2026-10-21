@@ -7,6 +7,7 @@ from app.config import settings
 from app.providers.base import (
     CategoryInfo,
     ECAuthError,
+    ECMaintenanceError,
     ECPlatform,
     IECProvider,
     ItemInfo,
@@ -21,7 +22,12 @@ from app.providers.base import (
     StockUpdateResult,
 )
 from app.providers.test_items import TEST_ITEMS
-from app.services.token_service import TokenRefreshError, TokenService
+from app.services.token_service import (
+    MaintenanceError,
+    TokenRefreshError,
+    TokenService,
+    maintenance_error_from_response,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +53,27 @@ class BaseECProvider(IECProvider):
         self._token_service = token_service
         self._client = client or httpx.AsyncClient(base_url=settings.base_api_base_url, timeout=10.0)
 
-    async def update_stock(self, item_id: str, quantity: int) -> StockUpdateResult:
+    async def _get_access_token(self) -> str:
         try:
-            access_token = await self._token_service.get_valid_access_token()
+            return await self._token_service.get_valid_access_token()
+        except MaintenanceError as e:
+            raise ECMaintenanceError(str(e), e.end) from e
         except TokenRefreshError as e:
             raise ECAuthError(str(e)) from e
 
-        resp = await self._client.post(
+    async def _call(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """BASE APIを呼ぶ。メンテナンス応答はECMaintenanceErrorにする
+        (「商品が見つからない」「失敗」等と区別できなくなるのを防ぐ)。"""
+        resp = await self._client.request(method, url, **kwargs)
+        maintenance = maintenance_error_from_response(resp)
+        if maintenance is not None:
+            raise ECMaintenanceError(str(maintenance), maintenance.end) from maintenance
+        return resp
+
+    async def update_stock(self, item_id: str, quantity: int) -> StockUpdateResult:
+        access_token = await self._get_access_token()
+
+        resp = await self._call("POST", 
             "/1/items/edit_stock",
             data={"item_id": item_id, "stock": quantity},
             headers={"Authorization": f"Bearer {access_token}"},
@@ -76,12 +96,9 @@ class BaseECProvider(IECProvider):
         if settings.demo_mode and item_id in TEST_ITEMS:
             return TEST_ITEMS[item_id]
 
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
-        resp = await self._client.get(
+        resp = await self._call("GET", 
             f"/1/items/detail/{item_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -96,15 +113,15 @@ class BaseECProvider(IECProvider):
         items = list(TEST_ITEMS.values()) if settings.demo_mode else []
 
         try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError:
+            access_token = await self._get_access_token()
+        except ECAuthError:
             # デモモードならBASE未認証でもテスト用商品だけで一覧UIの動作確認ができるように
             # する。通常モードで未認証の場合はitemsは空のまま返す(テスト商品を実データに
             # 混ぜない)
             return items
 
         try:
-            resp = await self._client.get(
+            resp = await self._call("GET", 
                 "/1/items",
                 params={"limit": limit, "offset": offset},
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -121,12 +138,9 @@ class BaseECProvider(IECProvider):
         return items
 
     async def update_item_description(self, item_id: str, detail: str) -> ItemUpdateResult:
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
-        resp = await self._client.post(
+        resp = await self._call("POST", 
             "/1/items/edit",
             data={"item_id": item_id, "detail": detail},
             headers={"Authorization": f"Bearer {access_token}"},
@@ -147,10 +161,7 @@ class BaseECProvider(IECProvider):
     async def list_orders(
         self, start_ordered: datetime, end_ordered: datetime | None = None
     ) -> list[OrderSummary]:
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
         params: dict[str, str | int] = {"start_ordered": _format_jst(start_ordered)}
         if end_ordered is not None:
@@ -160,7 +171,7 @@ class BaseECProvider(IECProvider):
         offset = 0
         limit = 100
         while True:
-            resp = await self._client.get(
+            resp = await self._call("GET", 
                 "/1/orders",
                 params={**params, "limit": limit, "offset": offset},
                 headers={"Authorization": f"Bearer {access_token}"},
@@ -188,12 +199,9 @@ class BaseECProvider(IECProvider):
         return summaries
 
     async def get_order_detail(self, unique_key: str) -> OrderDetail | None:
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
-        resp = await self._client.get(
+        resp = await self._call("GET", 
             f"/1/orders/detail/{unique_key}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -267,7 +275,7 @@ class BaseECProvider(IECProvider):
         または既にオプション構成が変わり選択肢が消えている場合はその分の対応が欠けるだけで
         エラーにはしない(呼び出し側はdictにない場合を「順序不明」として末尾扱いする)。
         """
-        resp = await self._client.get(
+        resp = await self._call("GET", 
             f"/1/items/detail/{item_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -290,12 +298,9 @@ class BaseECProvider(IECProvider):
         return order_map
 
     async def get_item_options(self, item_id: str) -> list[ItemOption]:
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
-        resp = await self._client.get(
+        resp = await self._call("GET", 
             f"/1/items/detail/{item_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -331,12 +336,9 @@ class BaseECProvider(IECProvider):
         return options
 
     async def get_item_variations(self, item_id: str) -> list[ItemVariation]:
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
-        resp = await self._client.get(
+        resp = await self._call("GET", 
             f"/1/items/detail/{item_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -355,12 +357,9 @@ class BaseECProvider(IECProvider):
         ]
 
     async def list_categories(self) -> list[CategoryInfo]:
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
-        resp = await self._client.get(
+        resp = await self._call("GET", 
             "/1/categories",
             headers={"Authorization": f"Bearer {access_token}"},
         )
@@ -370,12 +369,9 @@ class BaseECProvider(IECProvider):
         return [CategoryInfo(category_id=raw["category_id"], name=raw["name"]) for raw in body["categories"]]
 
     async def get_item_categories(self, item_id: str) -> list[int]:
-        try:
-            access_token = await self._token_service.get_valid_access_token()
-        except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+        access_token = await self._get_access_token()
 
-        resp = await self._client.get(
+        resp = await self._call("GET", 
             f"/1/item_categories/detail/{item_id}",
             headers={"Authorization": f"Bearer {access_token}"},
         )

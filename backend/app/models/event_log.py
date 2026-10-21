@@ -19,6 +19,7 @@ class EventLogCategory(str, enum.Enum):
     STOCK_OPERATION_FAILED = "stock_operation_failed"
     RETENTION_CLEANUP = "retention_cleanup"
     AUTH_ERROR = "auth_error"
+    EC_MAINTENANCE = "ec_maintenance"
 
 
 class EventLog(Base):
@@ -34,7 +35,7 @@ class EventLog(Base):
     __table_args__ = (
         CheckConstraint(
             "category IN ('reservation_skipped', 'assembly_stock_shortfall', 'stock_operation_failed', "
-            "'retention_cleanup', 'auth_error')",
+            "'retention_cleanup', 'auth_error', 'ec_maintenance')",
             name="ck_event_logs_category",
         ),
         CheckConstraint("level IN ('info', 'warning', 'error')", name="ck_event_logs_level"),

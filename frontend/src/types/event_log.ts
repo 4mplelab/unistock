@@ -3,7 +3,8 @@ export type EventLogCategory =
   | "assembly_stock_shortfall"
   | "stock_operation_failed"
   | "retention_cleanup"
-  | "auth_error";
+  | "auth_error"
+  | "ec_maintenance";
 export type EventLogLevel = "info" | "warning" | "error";
 
 export interface EventLog {

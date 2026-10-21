@@ -9,9 +9,9 @@ from app.models.order import Order
 from app.services.notification_service import notify
 
 # イベントベースの通知対象(状態ベースのreorder_threshold/po_overdue/buildable_thresholdとは
-# 別系統、notification_check_service.py参照)。この2カテゴリはEventLogService.log()の
+# 別系統、notification_check_service.py参照)。これらのカテゴリはEventLogService.log()の
 # 呼び出しそのものが「1回の実際の発生」を表すため、dedup無しでその都度通知してよい
-_NOTIFIABLE_CATEGORIES = {"auth_error", "stock_operation_failed"}
+_NOTIFIABLE_CATEGORIES = {"auth_error", "stock_operation_failed", "ec_maintenance"}
 
 # 「解消されるまで自動リトライのたびに繰り返し記録されうる」カテゴリ。同一(category,
 # order_id, item_id)の行が既にあれば新規行を追加せず、その行のoccurrence_count/

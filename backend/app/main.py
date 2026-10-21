@@ -2,7 +2,8 @@ import logging
 import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import settings as app_settings
@@ -34,6 +35,7 @@ from app.routers import (
     version,
 )
 from app.core.security import init_fernet_key
+from app.providers.base import ECMaintenanceError
 from app.services.auth_service import ensure_token_encryption_key, seed_initial_admin
 from app.services.demo_mode_state import sync_demo_mode_state
 from app.services.item_category_sync_scheduler import (
@@ -100,6 +102,12 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="UniStock API", lifespan=lifespan)
+
+
+@app.exception_handler(ECMaintenanceError)
+async def _ec_maintenance_handler(_request: Request, exc: ECMaintenanceError) -> JSONResponse:
+    # 連携先のメンテナンス中は「未認証」「商品が見つからない」等と区別して返す
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 app.add_middleware(
     SessionMiddleware,

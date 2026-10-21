@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
@@ -8,13 +8,15 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.shop import Shop
 from app.models.stock_schedule import ScheduleStatus, StockSchedule
-from app.providers.base import ECAuthError
+from app.providers.base import ECAuthError, ECMaintenanceError
 from app.providers.factory import build_provider
 from app.services.event_log_service import EventLogService
 
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler(timezone="UTC")
+
+_JST = timezone(timedelta(hours=9))
 
 
 async def poll_due_schedules() -> None:
@@ -64,6 +66,27 @@ async def execute_schedule(schedule_id: int) -> None:
             schedule.status = ScheduleStatus.SUCCESS.value if result.success else ScheduleStatus.FAILED.value
             schedule.result_message = result.error_message or "OK"
             schedule.http_status = result.http_status
+        except ECMaintenanceError as e:
+            # 自動での再実行・実行時刻の変更はしない。失敗として記録し、通知で知らせる
+            # (メンテナンス明けに実行してよいかは運用者が判断して再登録する)
+            schedule.status = ScheduleStatus.FAILED.value
+            schedule.result_message = f"連携先のメンテナンス中のため実行できませんでした: {e}"
+            item_label = f"{schedule.item_name}({schedule.item_id})" if schedule.item_name else schedule.item_id
+            run_at_jst = schedule.run_at.astimezone(_JST).strftime("%Y-%m-%d %H:%M")
+            await EventLogService(session).log(
+                category="ec_maintenance",
+                level="warning",
+                message=(
+                    f"ショップ「{shop.name}」のリストック予約を実行できませんでした(連携先のメンテナンス中)\n"
+                    f"商品: {item_label}\n"
+                    f"在庫数: {schedule.target_stock}\n"
+                    f"予定日時: {run_at_jst}\n"
+                    f"{e}\n"
+                    "自動では再実行しません。必要に応じて予約を登録し直してください。"
+                ),
+                item_id=schedule.item_id,
+                shop_id=shop.id,
+            )
         except ECAuthError as e:
             schedule.status = ScheduleStatus.FAILED.value
             schedule.result_message = f"認証エラー(再認証が必要): {e}"
