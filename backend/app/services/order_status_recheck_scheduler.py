@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.models.order import DispatchStatus, Order
+from app.providers.base import ECMaintenanceError
 from app.providers.factory import build_provider
 from app.services.order_ingestion_service import IngestionResult, OrderIngestionService
 from app.services.scheduler import scheduler
@@ -45,6 +46,11 @@ async def recheck_order_status() -> None:
                     provider = build_provider(shop, session)
                     ingestions[order.shop_id] = OrderIngestionService(session, provider, shop.id)
                 await ingestions[order.shop_id].recheck_status(order, result)
+            except ECMaintenanceError as e:
+                # 残りの注文も同じ結果になるため打ち切る(次回のリチェックで再確認される)
+                logger.warning("連携先がメンテナンス中のため注文状態リチェックを中断しました: %s", e)
+                await session.rollback()
+                break
             except Exception:  # noqa: BLE001
                 logger.exception("注文 %s の状態リチェック中にエラーが発生しました", order.unique_key)
                 await session.rollback()

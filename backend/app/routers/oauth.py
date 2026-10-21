@@ -14,7 +14,7 @@ from app.services.auth_service import require_admin, require_auth
 from app.services.item_category_sync_scheduler import sync_item_categories_for_shop_now
 from app.services.order_scheduler import ORDER_POLLER_LAST_SYNCED_AT_KEY
 from app.services.shop_service import ShopNotFoundError, ShopService
-from app.services.token_service import TokenRefreshError, TokenService
+from app.services.token_service import MaintenanceError, TokenRefreshError, TokenService
 
 router = APIRouter(prefix="/api/oauth/shops/{shop_id}", tags=["oauth"], dependencies=[Depends(require_auth)])
 
@@ -62,6 +62,8 @@ async def exchange_code(
     service = TokenService(session, shop_id)
     try:
         token = await service.exchange_code(body.code)
+    except MaintenanceError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
     except TokenRefreshError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 

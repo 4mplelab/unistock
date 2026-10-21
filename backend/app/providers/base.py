@@ -136,6 +136,17 @@ class ECAuthError(ECProviderError):
     """refresh_token失効など、再認証が必要な致命的な認証エラー"""
 
 
+class ECMaintenanceError(ECProviderError):
+    """連携先がメンテナンス中で処理できない一時的なエラー。再認証は不要。
+
+    endはメンテナンス終了予定時刻(連携先が返さない場合はNone)。
+    """
+
+    def __init__(self, message: str, end: datetime | None = None):
+        super().__init__(message)
+        self.end = end
+
+
 class IECProvider(ABC):
     platform: ECPlatform
 
@@ -145,7 +156,8 @@ class IECProvider(ABC):
 
         API側のバリデーションエラー(bad_item_id等)は例外を投げず
         StockUpdateResult(success=False, ...) として返す。
-        再認証が必要な致命的な認証エラーのみ ECAuthError を送出する。
+        再認証が必要な致命的な認証エラーのみ ECAuthError を、連携先のメンテナンス中は
+        ECMaintenanceError を送出する。
         """
         ...
 
@@ -165,7 +177,8 @@ class IECProvider(ABC):
 
         API側のバリデーションエラー(編集不可な商品タイプ等)は例外を投げず
         ItemUpdateResult(success=False, ...) として返す。
-        再認証が必要な致命的な認証エラーのみ ECAuthError を送出する。
+        再認証が必要な致命的な認証エラーのみ ECAuthError を、連携先のメンテナンス中は
+        ECMaintenanceError を送出する。
         """
         ...
 

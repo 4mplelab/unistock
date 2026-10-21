@@ -11,8 +11,37 @@ ACCESS_TOKEN_REFRESH_MARGIN = timedelta(minutes=2)
 REFRESH_TOKEN_LIFETIME = timedelta(days=30)
 
 
+_JST = timezone(timedelta(hours=9))
+
+
 class TokenRefreshError(Exception):
     """再認証が必要な場合に送出する"""
+
+
+class MaintenanceError(Exception):
+    """BASEがメンテナンス中。再認証は不要で、終了後に再試行すれば回復する"""
+
+    def __init__(self, end: datetime | None):
+        self.end = end
+        end_text = end.astimezone(_JST).strftime("%Y-%m-%d %H:%M") if end else "不明"
+        super().__init__(f"BASEがメンテナンス中です(終了予定: {end_text})")
+
+
+def maintenance_error_from_response(resp: httpx.Response) -> MaintenanceError | None:
+    """BASEのメンテナンス応答({"error": "maintenance", "maintenance": {"start", "end"}})なら
+    MaintenanceErrorを返す。それ以外はNone。"""
+    if resp.status_code == 200:
+        return None
+    try:
+        body = resp.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict) or body.get("error") != "maintenance":
+        return None
+    maintenance = body.get("maintenance")
+    raw_end = maintenance.get("end") if isinstance(maintenance, dict) else None
+    end = datetime.fromtimestamp(raw_end, tz=timezone.utc) if isinstance(raw_end, (int, float)) else None
+    return MaintenanceError(end)
 
 
 class TokenService:
@@ -48,6 +77,11 @@ class TokenService:
                 },
             )
         if resp.status_code != 200:
+            # メンテナンス中の応答は認証の問題ではないため、再認証扱いにしない
+            # (refresh_tokenは未使用のまま有効なので、終了後にそのまま更新できる)
+            maintenance = maintenance_error_from_response(resp)
+            if maintenance is not None:
+                raise maintenance
             raise TokenRefreshError(f"トークン更新に失敗しました: {resp.status_code} {resp.text}")
 
         data = resp.json()
@@ -73,6 +107,9 @@ class TokenService:
                 },
             )
         if resp.status_code != 200:
+            maintenance = maintenance_error_from_response(resp)
+            if maintenance is not None:
+                raise maintenance
             raise TokenRefreshError(f"認可コードの交換に失敗しました: {resp.status_code} {resp.text}")
 
         data = resp.json()

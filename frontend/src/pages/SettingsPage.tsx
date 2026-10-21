@@ -69,6 +69,7 @@ const NOTIFICATION_CATEGORIES: { key: string; label: string }[] = [
   { key: "buildable_threshold", label: "商品の作成可能数が閾値を下回った" },
   { key: "auth_error", label: "外部連携の認証エラー" },
   { key: "stock_operation_failed", label: "在庫操作の失敗" },
+  { key: "ec_maintenance", label: "連携先のメンテナンスでリストック予約を実行できなかった" },
 ];
 
 function notificationEnabledKey(category: string, channel: "webhook" | "email", shopId?: number): string {
