@@ -68,6 +68,13 @@ class AssemblyImportResult(BaseModel):
     errors: list[str]
 
 
+class AssemblyBuildable(BaseModel):
+    """中間品を、材料(部品/中間品)の今ある在庫だけで組み立てられる数(中間品一覧の作成可能数)。"""
+
+    id: int
+    buildable: int
+
+
 class AssemblyBuildableAvailable(BaseModel):
     """中間品の在庫(available)に、自身のレシピ(材料)から追加で組み立てられる分を
     加えた数。材料がさらに中間品の場合は再帰的に辿って算出する(BOM一覧の

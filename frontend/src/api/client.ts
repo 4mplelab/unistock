@@ -333,6 +333,11 @@ export function fetchAssemblies(): Promise<Assembly[]> {
   return request<Assembly[]>("/assemblies");
 }
 
+// 各中間品を、材料(部品/中間品)の今ある在庫だけで組み立てられる数。中間品一覧の作成可能数で使用する
+export function fetchAssembliesBuildable(): Promise<{ id: number; buildable: number }[]> {
+  return request<{ id: number; buildable: number }[]>("/assemblies/buildable");
+}
+
 // 各中間品の在庫(available)に、材料(部品/中間品)から追加で組み立てられる分を
 // 加えた数(多段構成も再帰的に辿る)。BOM一覧の作成可能数計算で使用する
 export function fetchAssembliesBuildableAvailable(): Promise<{ id: number; available: number }[]> {

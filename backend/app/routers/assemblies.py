@@ -15,6 +15,7 @@ from app.services.reservation_lookup_service import list_reserving_orders_for_as
 from app.services.stock_movement_service import list_movements, page_to_read
 from app.schemas.assembly import (
     AssemblyBomUsageRead,
+    AssemblyBuildable,
     AssemblyBuildableAvailable,
     AssemblyBuildCreate,
     AssemblyCostRead,
@@ -130,6 +131,14 @@ async def import_assemblies(
 
     service = AssemblyService(session)
     return await service.import_csv(text)
+
+
+@router.get("/buildable", response_model=list[AssemblyBuildable])
+async def list_buildable(session: AsyncSession = Depends(get_db)) -> list[AssemblyBuildable]:
+    """各中間品を、材料の今ある在庫だけで組み立てられる数。中間品一覧の作成可能数で使用する。"""
+    service = AssemblyService(session)
+    buildable = await service.compute_buildable_from_materials()
+    return [AssemblyBuildable(id=aid, buildable=count) for aid, count in buildable.items()]
 
 
 @router.get("/buildable-available", response_model=list[AssemblyBuildableAvailable])

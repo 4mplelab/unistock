@@ -367,6 +367,42 @@ class AssemblyService:
 
         return {assembly_id: resolve(assembly_id) for assembly_id in assembly_available}
 
+    async def compute_buildable_from_materials(self) -> dict[int, int]:
+        """中間品ごとに、材料(部品/中間品)の今ある在庫だけで組み立てられる数を算出する。
+        材料の中間品をさらに組み立てる分は含めず、自身の在庫も加えない(中間品一覧の
+        作成可能数表示用)。レシピ未登録の中間品は0。
+        """
+        part_available = {
+            row.id: row.stock - row.reserved
+            for row in (await self._session.execute(select(Part.id, Part.stock, Part.reserved))).all()
+        }
+        assembly_rows = (
+            await self._session.execute(select(Assembly.id, Assembly.stock, Assembly.reserved))
+        ).all()
+        assembly_available = {row.id: row.stock - row.reserved for row in assembly_rows}
+
+        item_rows = (
+            await self._session.execute(
+                select(
+                    AssemblyItem.assembly_id,
+                    AssemblyItem.material_part_id,
+                    AssemblyItem.material_assembly_id,
+                    AssemblyItem.quantity,
+                )
+            )
+        ).all()
+        buildable_by_assembly: dict[int, int] = {}
+        for row in item_rows:
+            if row.material_part_id is not None:
+                material_available = part_available.get(row.material_part_id, 0)
+            else:
+                material_available = assembly_available.get(row.material_assembly_id, 0)
+            buildable = max(0, material_available) // row.quantity
+            current = buildable_by_assembly.get(row.assembly_id)
+            buildable_by_assembly[row.assembly_id] = buildable if current is None else min(current, buildable)
+
+        return {row.id: buildable_by_assembly.get(row.id, 0) for row in assembly_rows}
+
     async def compute_costs(self) -> dict[int, int]:
         """中間品ごとの原価(レシピの部品原価合計+自身の追加費用)を算出する。
         材料がさらに中間品であるケース(多段構成)も再帰的に辿り、単価未設定の

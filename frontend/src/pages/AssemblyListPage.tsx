@@ -6,7 +6,7 @@ import {
   deleteAssembly,
   exportAssembliesCsv,
   fetchAssemblies,
-  fetchAssembliesBuildableAvailable,
+  fetchAssembliesBuildable,
   fetchAssembliesCosts,
   fetchAssemblyReservations,
   importAssembliesCsv,
@@ -103,10 +103,10 @@ export default function AssemblyListPage() {
   });
   const costById = new Map((costsQuery.data ?? []).map((c) => [c.id, c.cost]));
   const buildableQuery = useQuery({
-    queryKey: ["assemblies", "buildable-available"],
-    queryFn: fetchAssembliesBuildableAvailable,
+    queryKey: ["assemblies", "buildable"],
+    queryFn: fetchAssembliesBuildable,
   });
-  const buildableById = new Map((buildableQuery.data ?? []).map((b) => [b.id, b.available]));
+  const buildableById = new Map((buildableQuery.data ?? []).map((b) => [b.id, b.buildable]));
 
   const deleteMutation = useMutation({
     mutationFn: deleteAssembly,

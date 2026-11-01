@@ -103,8 +103,8 @@ async def list_assemblies() -> Any:
 
 @mcp.tool()
 async def list_buildable_assemblies() -> Any:
-    """各中間品について、現在の材料在庫から追加で組み立てられる数を取得する。"""
-    return await _get("/assemblies/buildable-available")
+    """各中間品について、材料(部品/中間品)の今ある在庫だけで組み立てられる数を取得する。"""
+    return await _get("/assemblies/buildable")
 
 
 @mcp.tool()
