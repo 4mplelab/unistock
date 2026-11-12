@@ -16,6 +16,8 @@ class ECOAuthToken(Base):
     access_token_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     refresh_token_expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     scope: Mapped[str | None] = mapped_column(String(255))
+    # トークン更新が失敗し再認証が必要になった時刻。再認証されるまでBASEへ問い合わせない
+    reauth_required_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -99,6 +99,7 @@ async def get_status(shop_id: int, session: AsyncSession = Depends(get_db)) -> O
         access_token_expires_at=token.access_token_expires_at,
         refresh_token_expires_at=token.refresh_token_expires_at,
         scope=token.scope,
+        reauth_required=token.reauth_required_at is not None,
         last_synced_at=last_synced_at,
     )
 

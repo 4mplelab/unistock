@@ -58,3 +58,5 @@ class EventLog(Base):
     # 件数だけが無意味に膨らむのを防ぐ。EventLogService.log参照)
     occurrence_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     last_occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # 最後に通知(Webhook/メール)を送った時刻。同じ内容が続く間の再通知間隔の判定に使う
+    last_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

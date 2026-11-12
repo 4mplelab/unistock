@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,9 +9,13 @@ from app.models.order import Order
 from app.services.notification_service import notify
 
 # イベントベースの通知対象(状態ベースのreorder_threshold/po_overdue/buildable_thresholdとは
-# 別系統、notification_check_service.py参照)。これらのカテゴリはEventLogService.log()の
-# 呼び出しそのものが「1回の実際の発生」を表すため、dedup無しでその都度通知してよい
+# 別系統、notification_check_service.py参照)
 _NOTIFIABLE_CATEGORIES = {"auth_error", "stock_operation_failed", "ec_maintenance"}
+
+# 通知対象のカテゴリで、同じ内容(category, shop_id, order_id, item_id, message)が
+# この間隔内に続けて起きている間は、新規行を追加せず既存行へ集約する。
+# 通知は最初の1回と、その後は前回の通知からこの間隔が空くたびに再通知する
+_RENOTIFY_INTERVAL = timedelta(hours=4)
 
 # 「解消されるまで自動リトライのたびに繰り返し記録されうる」カテゴリ。同一(category,
 # order_id, item_id)の行が既にあれば新規行を追加せず、その行のoccurrence_count/
@@ -42,8 +46,9 @@ class EventLogService:
         item_id)の既存行があれば新規行を追加せず、その行を更新する(occurrence_countを
         増やし、last_occurred_at/messageを最新化する)。
 
-        category が auth_error / stock_operation_failed の場合、通知(Webhook/メール)も
-        あわせて送る(デモモードでは実データではないため送らない)。
+        category が _NOTIFIABLE_CATEGORIES に含まれる場合、通知(Webhook/メール)も
+        あわせて送る(デモモードでは実データではないため送らない)。同じ内容が続いている間は
+        既存行へ集約し、前回の通知から _RENOTIFY_INTERVAL 経っていれば再通知する。
         """
         if category in _AGGREGATABLE_CATEGORIES and order_id is not None:
             existing_result = await self._session.execute(
@@ -62,14 +67,58 @@ class EventLogService:
                 await self._session.commit()
                 return
 
+        now = datetime.now(timezone.utc)
+        should_notify = (
+            not settings.demo_mode and level in ("warning", "error") and category in _NOTIFIABLE_CATEGORIES
+        )
+
+        if category in _NOTIFIABLE_CATEGORIES:
+            recent_result = await self._session.execute(
+                select(EventLog)
+                .where(
+                    EventLog.category == category,
+                    EventLog.shop_id.is_(None) if shop_id is None else EventLog.shop_id == shop_id,
+                    EventLog.order_id.is_(None) if order_id is None else EventLog.order_id == order_id,
+                    EventLog.item_id.is_(None) if item_id is None else EventLog.item_id == item_id,
+                    EventLog.message == message,
+                    EventLog.last_occurred_at >= now - _RENOTIFY_INTERVAL,
+                )
+                .order_by(EventLog.last_occurred_at.desc())
+            )
+            recent = recent_result.scalars().first()
+            if recent is not None:
+                recent.level = level
+                recent.occurrence_count += 1
+                recent.last_occurred_at = now
+                renotify = should_notify and (
+                    recent.last_notified_at is None or now - recent.last_notified_at >= _RENOTIFY_INTERVAL
+                )
+                if renotify:
+                    recent.last_notified_at = now
+                await self._session.commit()
+                if renotify:
+                    await notify(
+                        self._session,
+                        category,
+                        f"{message}\n(まだ解消していません。これまでに{recent.occurrence_count}回発生しています)",
+                        shop_ids=[shop_id],
+                    )
+                return
+
         self._session.add(
             EventLog(
-                category=category, level=level, message=message, order_id=order_id, item_id=item_id, shop_id=shop_id
+                category=category,
+                level=level,
+                message=message,
+                order_id=order_id,
+                item_id=item_id,
+                shop_id=shop_id,
+                last_notified_at=now if should_notify else None,
             )
         )
         await self._session.commit()
 
-        if not settings.demo_mode and level in ("warning", "error") and category in _NOTIFIABLE_CATEGORIES:
+        if should_notify:
             await notify(self._session, category, message, shop_ids=[shop_id])
 
     async def list_recent(

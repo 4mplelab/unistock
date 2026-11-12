@@ -133,7 +133,13 @@ class ECProviderError(Exception):
 
 
 class ECAuthError(ECProviderError):
-    """refresh_token失効など、再認証が必要な致命的な認証エラー"""
+    """refresh_token失効など、再認証が必要な致命的な認証エラー
+
+    newly_required: 今回初めて再認証が必要になったか。Falseなら既に通知済みの状態"""
+
+    def __init__(self, message: str, newly_required: bool = True):
+        super().__init__(message)
+        self.newly_required = newly_required
 
 
 class ECMaintenanceError(ECProviderError):

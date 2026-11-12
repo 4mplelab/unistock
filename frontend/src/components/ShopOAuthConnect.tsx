@@ -83,7 +83,12 @@ export default function ShopOAuthConnect({
       {oauthStatus && (
         <div className="flex items-center justify-between gap-4">
           <div>
-            {oauthStatus.authenticated ? (
+            {oauthStatus.authenticated && oauthStatus.reauth_required ? (
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-destructive">
+                <span className="size-2 rounded-full bg-destructive" />
+                再認証が必要
+              </span>
+            ) : oauthStatus.authenticated ? (
               <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
                 <span className="size-2 rounded-full bg-emerald-500" />
                 連携済み
@@ -94,7 +99,12 @@ export default function ShopOAuthConnect({
                 未連携
               </span>
             )}
-            {oauthStatus.authenticated && oauthStatus.refresh_token_expires_at && (
+            {oauthStatus.authenticated && oauthStatus.reauth_required && (
+              <p className="mt-1 text-xs text-muted-foreground-subtle">
+                BASEとの連携が切れたため、注文の取り込みを止めています。「再認証する」から連携し直してください
+              </p>
+            )}
+            {oauthStatus.authenticated && !oauthStatus.reauth_required && oauthStatus.refresh_token_expires_at && (
               <p className="mt-1 text-xs text-muted-foreground-subtle">
                 自動更新されなかった場合の認証期限: {formatDateTime(oauthStatus.refresh_token_expires_at)}
               </p>

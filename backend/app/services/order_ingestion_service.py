@@ -92,12 +92,18 @@ class OrderIngestionService:
             result.errors.append(str(e))
             return result
         except ECAuthError as e:
-            logger.exception("注文一覧の取得に失敗しました(認証エラー)")
             result.errors.append(str(e))
+            if e.newly_required:
+                logger.exception("注文一覧の取得に失敗しました(認証エラー)")
+            else:
+                # 再認証されるまでBASEへは問い合わせず、同期は止まったままにする
+                logger.warning("再認証待ちのため注文同期をスキップしました: %s", e)
+            # 再認証されるまで毎回同じ文面で記録し、1行に集約して定期的に再通知する
+            # (エラーの詳細はファイルログに残す)
             await EventLogService(self._session).log(
                 category="auth_error",
                 level="error",
-                message=f"外部連携の認証エラーにより注文同期に失敗しました: {e}",
+                message="外部連携の認証エラーにより注文同期を止めています。ショップ設定から再認証してください",
                 shop_id=self._shop_id,
             )
             return result

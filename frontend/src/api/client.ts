@@ -839,6 +839,7 @@ export interface OAuthStatus {
   access_token_expires_at: string | null;
   refresh_token_expires_at: string | null;
   scope: string | null;
+  reauth_required: boolean;
   last_synced_at: string | null;
 }
 

@@ -480,7 +480,13 @@ function ShopSwitcher({ isAdmin }: { isAdmin: boolean }) {
   });
 
   const currentConnected =
-    currentShop == null ? null : statusMap?.get(currentShop.id)?.authenticated ?? null;
+    currentShop == null
+      ? null
+      : (() => {
+          const status = statusMap?.get(currentShop.id);
+          if (status == null) return null;
+          return status.authenticated && !("reauth_required" in status && status.reauth_required);
+        })();
 
   function handleCreated(shopId: number) {
     setCurrentShopId(shopId);

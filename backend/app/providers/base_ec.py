@@ -59,7 +59,7 @@ class BaseECProvider(IECProvider):
         except MaintenanceError as e:
             raise ECMaintenanceError(str(e), e.end) from e
         except TokenRefreshError as e:
-            raise ECAuthError(str(e)) from e
+            raise ECAuthError(str(e), newly_required=e.newly_required) from e
 
     async def _call(self, method: str, url: str, **kwargs) -> httpx.Response:
         """BASE APIを呼ぶ。メンテナンス応答はECMaintenanceErrorにする

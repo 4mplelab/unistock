@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 import httpx
@@ -15,7 +16,26 @@ _JST = timezone(timedelta(hours=9))
 
 
 class TokenRefreshError(Exception):
-    """再認証が必要な場合に送出する"""
+    """再認証が必要な場合に送出する。
+
+    newly_required: 今回初めて再認証が必要になったか。Falseなら既に再認証待ちの状態で、
+    BASEへは問い合わせていない(通知は初回だけ出せばよい)"""
+
+    def __init__(self, message: str, newly_required: bool = True):
+        super().__init__(message)
+        self.newly_required = newly_required
+
+
+# 複数の定期処理が同時にトークンを更新すると、BASEが発行し直したrefresh_tokenを
+# 後から古いrefresh_tokenで上書き更新しようとして失敗する。ショップごとに1つずつ更新させる
+_refresh_locks: dict[int, asyncio.Lock] = {}
+
+
+def _refresh_lock(shop_id: int) -> asyncio.Lock:
+    return _refresh_locks.setdefault(shop_id, asyncio.Lock())
+
+
+_REAUTH_REQUIRED_MESSAGE = "BASEとの連携が切れています。ショップ設定から再認証してください。"
 
 
 # メンテナンス中にBASEの手前のサーバーが返す(本文はJSONでなくHTML)。終了予定は分からない
@@ -62,15 +82,33 @@ class TokenService:
         token = await self._session.get(ECOAuthToken, self._shop_id)
         if token is None:
             raise TokenRefreshError("BASE未認証です。初回OAuth認証を行ってください。")
-
-        now = datetime.now(timezone.utc)
-        if token.access_token_expires_at - now > ACCESS_TOKEN_REFRESH_MARGIN:
+        if token.reauth_required_at is not None:
+            raise TokenRefreshError(_REAUTH_REQUIRED_MESSAGE, newly_required=False)
+        if self._access_token_usable(token):
             return decrypt(token.access_token_encrypted)
 
-        if token.refresh_token_expires_at <= now:
-            raise TokenRefreshError("refresh_tokenが期限切れです(30日)。再認証してください。")
+        async with _refresh_lock(self._shop_id):
+            # 待っている間に他の処理が更新している場合があるため、最新の状態を読み直す
+            await self._session.refresh(token)
+            if token.reauth_required_at is not None:
+                raise TokenRefreshError(_REAUTH_REQUIRED_MESSAGE, newly_required=False)
+            if self._access_token_usable(token):
+                return decrypt(token.access_token_encrypted)
 
-        return await self._refresh(token)
+            if token.refresh_token_expires_at <= datetime.now(timezone.utc):
+                await self._mark_reauth_required(token)
+                raise TokenRefreshError("refresh_tokenが期限切れです(30日)。再認証してください。")
+
+            return await self._refresh(token)
+
+    @staticmethod
+    def _access_token_usable(token: ECOAuthToken) -> bool:
+        return token.access_token_expires_at - datetime.now(timezone.utc) > ACCESS_TOKEN_REFRESH_MARGIN
+
+    async def _mark_reauth_required(self, token: ECOAuthToken) -> None:
+        # 以降は再認証されるまでBASEへ問い合わせず、通知も繰り返さない
+        token.reauth_required_at = datetime.now(timezone.utc)
+        await self._session.commit()
 
     async def _refresh(self, token: ECOAuthToken) -> str:
         async with httpx.AsyncClient(base_url=settings.base_api_base_url, timeout=10.0) as client:
@@ -91,6 +129,7 @@ class TokenService:
             maintenance = maintenance_error_from_response(resp)
             if maintenance is not None:
                 raise maintenance
+            await self._mark_reauth_required(token)
             raise TokenRefreshError(f"トークン更新に失敗しました: {resp.status_code} {resp.text}")
 
         data = resp.json()
@@ -134,5 +173,6 @@ class TokenService:
         token.access_token_expires_at = now + timedelta(seconds=data["expires_in"])
         token.refresh_token_expires_at = now + REFRESH_TOKEN_LIFETIME
         token.scope = data.get("scope")
+        token.reauth_required_at = None
         await self._session.commit()
         return token

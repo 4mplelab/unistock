@@ -57,6 +57,9 @@ class FakeSession:
     async def get(self, model, pk):
         return self._token
 
+    async def refresh(self, obj):
+        pass
+
     async def commit(self):
         self.committed = True
 
